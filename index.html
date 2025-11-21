@@ -1,0 +1,75 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AMANAT - Исламская рассрочка</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+
+        /* Стили для главной страницы */
+        #intro {
+            text-align: center;
+            padding: 50px;
+            background: #2c3e50;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        #intro h1 {
+            font-size: 36px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #27ae60;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            background-color: #2ecc71;
+        }
+
+        /* Плавный переход */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        #intro {
+            animation: fadeIn 2s ease-in;
+        }
+
+    </style>
+</head>
+<body>
+
+<!-- Главная страница -->
+<section id="intro">
+    <h1>Добро пожаловать в AMANAT</h1>
+    <p>Оформите рассрочку на электронику и бытовую технику с минимальными условиями!</p>
+</section>
+
+<script>
+    // Пауза 10 секунд перед переходом
+    setTimeout(function() {
+        // Плавный переход на форму клиента
+        window.location.href = "#client-form";
+    }, 10000); // 10 секунд
+</script>
+
+</body>
+</html>
