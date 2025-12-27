@@ -17,6 +17,7 @@ export default auth((req) => {
   const publicRoutes = [
     "/",
     "/login",
+    "/register",
     "/usloviya",
     "/catalog",
     "/calculator",

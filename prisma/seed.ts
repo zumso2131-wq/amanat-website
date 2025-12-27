@@ -11,105 +11,92 @@ async function main() {
   console.log("🌱 Начало заполнения базы данных...")
 
   // ========================================
-  // 1. ПОЛЬЗОВАТЕЛИ
+  // 1. АДМИНИСТРАТОР (создаётся только если не существует)
   // ========================================
   
-  // Данные админа из переменных окружения
-  const adminPhone = process.env.SEED_ADMIN_PHONE || "+77001234567"
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD || "admin123"
-  const adminName = process.env.SEED_ADMIN_NAME || "Администратор"
+  // Данные админа (жёстко заданы + можно переопределить через env)
+  const adminPhone = process.env.SEED_ADMIN_PHONE || "89291639595"
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || "Lamaro095"
+  const adminName = process.env.SEED_ADMIN_NAME || "Главный Администратор"
 
-  // Хешируем пароли
-  const adminHash = await bcrypt.hash(adminPassword, 12)
-  const managerHash = await bcrypt.hash("manager123", 12)
-  const clientHash = await bcrypt.hash("client123", 12)
-
-  // Создаём администратора
-  const admin = await prisma.user.upsert({
-    where: { phone: adminPhone },
-    update: {},
-    create: {
-      phone: adminPhone,
-      passwordHash: adminHash,
-      fullName: adminName,
-      email: "admin@amanat.kz",
-      role: "ADMIN",
-      isActive: true,
-    },
+  // Проверяем, есть ли уже админ с таким телефоном
+  const existingAdmin = await prisma.user.findUnique({
+    where: { phone: adminPhone }
   })
-  console.log(`✅ Админ: ${admin.phone} / ${adminPassword}`)
 
-  // Создаём менеджера
-  const manager = await prisma.user.upsert({
-    where: { phone: "+77009876543" },
-    update: {},
-    create: {
-      phone: "+77009876543",
-      passwordHash: managerHash,
-      fullName: "Менеджер Айгуль",
-      email: "manager@amanat.kz",
-      role: "MANAGER",
-      isActive: true,
-    },
-  })
-  console.log(`✅ Менеджер: ${manager.phone} / manager123`)
-
-  // Создаём пользователя-клиента
-  const clientUser = await prisma.user.upsert({
-    where: { phone: "+77005551234" },
-    update: {},
-    create: {
-      phone: "+77005551234",
-      passwordHash: clientHash,
-      fullName: "Иванов Иван Иванович",
-      email: "client@example.com",
-      role: "CLIENT",
-      isActive: true,
-    },
-  })
-  console.log(`✅ Клиент (user): ${clientUser.phone} / client123`)
+  if (!existingAdmin) {
+    // Хешируем пароль
+    const adminHash = await bcrypt.hash(adminPassword, 12)
+    
+    const admin = await prisma.user.create({
+      data: {
+        phone: adminPhone,
+        passwordHash: adminHash,
+        fullName: adminName,
+        email: "admin@amanat.kz",
+        role: "ADMIN",
+        isActive: true,
+      },
+    })
+    console.log(`✅ Создан админ: ${admin.phone} / ${adminPassword}`)
+  } else {
+    console.log(`ℹ️ Админ уже существует: ${existingAdmin.phone}`)
+  }
 
   // ========================================
-  // 2. КЛИЕНТЫ (для сделок)
+  // 2. ДЕМО-МЕНЕДЖЕР (опционально)
+  // ========================================
+  
+  const managerPhone = "+77009876543"
+  const existingManager = await prisma.user.findUnique({
+    where: { phone: managerPhone }
+  })
+
+  if (!existingManager) {
+    const managerHash = await bcrypt.hash("manager123", 12)
+    const manager = await prisma.user.create({
+      data: {
+        phone: managerPhone,
+        passwordHash: managerHash,
+        fullName: "Менеджер Айгуль",
+        email: "manager@amanat.kz",
+        role: "MANAGER",
+        isActive: true,
+      },
+    })
+    console.log(`✅ Создан менеджер: ${manager.phone} / manager123`)
+  }
+
+  // ========================================
+  // 3. ДЕМО-КЛИЕНТЫ (для тестирования)
   // ========================================
 
-  const client1 = await prisma.client.upsert({
-    where: { phone: "+77771112233" },
-    update: {},
-    create: {
-      fullName: "Петров Пётр Петрович",
+  const demoClients = [
+    {
       phone: "+77771112233",
+      fullName: "Петров Пётр Петрович",
       iin: "901234567890",
       address: "г. Алматы, ул. Абая, 10",
     },
-  })
-
-  await prisma.client.upsert({
-    where: { phone: "+77772223344" },
-    update: {},
-    create: {
-      fullName: "Сидорова Анна Михайловна",
+    {
       phone: "+77772223344",
+      fullName: "Сидорова Анна Михайловна",
       iin: "950987654321",
       address: "г. Астана, пр. Республики, 25",
     },
-  })
+  ]
 
-  await prisma.client.upsert({
-    where: { phone: "+77773334455" },
-    update: {},
-    create: {
-      fullName: "Казахстанов Асет Ерланович",
-      phone: "+77773334455",
-      iin: "880123456789",
-      address: "г. Шымкент, ул. Тауке хана, 5",
-    },
-  })
-
-  console.log(`✅ Создано клиентов: 3`)
+  for (const clientData of demoClients) {
+    await prisma.client.upsert({
+      where: { phone: clientData.phone },
+      update: {},
+      create: clientData,
+    })
+  }
+  console.log(`✅ Демо-клиенты созданы: ${demoClients.length}`)
 
   // ========================================
-  // 3. ТОВАРЫ
+  // 4. ТОВАРЫ
   // ========================================
 
   const products = [
@@ -118,35 +105,18 @@ async function main() {
       sku: "IPHONE-15PM-256",
       category: "Смартфоны",
       defaultPurchasePrice: 650000,
-      description: "Флагманский смартфон Apple",
     },
     {
       name: "Samsung Galaxy S24 Ultra",
       sku: "SAMSUNG-S24U",
       category: "Смартфоны",
       defaultPurchasePrice: 580000,
-      description: "Флагман Samsung с S Pen",
     },
     {
       name: "MacBook Pro 14 M3",
       sku: "MBP-14-M3",
       category: "Ноутбуки",
       defaultPurchasePrice: 1200000,
-      description: "Профессиональный ноутбук Apple",
-    },
-    {
-      name: "Sony PlayStation 5",
-      sku: "PS5-STD",
-      category: "Игровые консоли",
-      defaultPurchasePrice: 280000,
-      description: "Игровая консоль нового поколения",
-    },
-    {
-      name: "Apple Watch Ultra 2",
-      sku: "AW-ULTRA-2",
-      category: "Умные часы",
-      defaultPurchasePrice: 420000,
-      description: "Премиум смарт-часы",
     },
   ]
 
@@ -157,118 +127,38 @@ async function main() {
       create: product,
     })
   }
-  console.log(`✅ Создано товаров: ${products.length}`)
-
-  // ========================================
-  // 4. ДЕМО-СДЕЛКА
-  // ========================================
-
-  // Проверяем, есть ли уже сделки
-  const existingDeals = await prisma.deal.count()
-  
-  if (existingDeals === 0) {
-    // Расчёт сделки
-    const purchasePrice = 650000
-    const months = 6
-    const markupPercent = 35
-    const salePrice = Math.round(purchasePrice * (1 + markupPercent / 100))
-    const downPayment = 100000
-    const amountToFinance = salePrice - downPayment
-    const basePayment = Math.floor(amountToFinance / months)
-    const remainder = amountToFinance - basePayment * months
-    const startDate = new Date()
-
-    // Создаём сделку
-    const deal = await prisma.deal.create({
-      data: {
-        dealNumber: "AM-2412-0001",
-        clientId: client1.id,
-        createdByUserId: manager.id,
-        productName: "iPhone 15 Pro Max 256GB",
-        productSku: "IPHONE-15PM-256",
-        purchasePrice,
-        markupPercentFinal: markupPercent,
-        salePrice,
-        downPayment,
-        amountToFinance,
-        months,
-        monthlyBasePayment: basePayment,
-        lastPaymentAdjustment: remainder,
-        startDate,
-        status: "ACTIVE",
-      },
-    })
-
-    // Создаём график платежей
-    for (let i = 1; i <= months; i++) {
-      const dueDate = new Date(startDate)
-      dueDate.setDate(dueDate.getDate() + 30 * i)
-      
-      const amount = i === months ? basePayment + remainder : basePayment
-      const isPaid = i <= 2 // Первые 2 платежа оплачены
-
-      await prisma.installment.create({
-        data: {
-          dealId: deal.id,
-          index: i,
-          dueDate,
-          amount,
-          status: isPaid ? "PAID" : "DUE",
-          paidAt: isPaid ? new Date() : null,
-        },
-      })
-    }
-
-    // Создаём платежи для первых 2 installments
-    const installments = await prisma.installment.findMany({
-      where: { dealId: deal.id, status: "PAID" },
-    })
-
-    for (const inst of installments) {
-      await prisma.payment.create({
-        data: {
-          dealId: deal.id,
-          installmentId: inst.id,
-          amount: inst.amount,
-          method: "CASH",
-          paidAt: new Date(),
-          comment: "Демо-платёж",
-        },
-      })
-    }
-
-    console.log(`✅ Создана демо-сделка: ${deal.dealNumber}`)
-  }
+  console.log(`✅ Товары созданы: ${products.length}`)
 
   // ========================================
   // 5. НАСТРОЙКИ
   // ========================================
 
-  await prisma.setting.upsert({
-    where: { key: "company_name" },
-    update: {},
-    create: { key: "company_name", value: "ТОО Аманат" },
-  })
+  const settings = [
+    { key: "company_name", value: "ТОО Аманат" },
+    { key: "company_phone", value: "+7 (700) 123-45-67" },
+    { key: "company_address", value: "г. Алматы, ул. Абая, 1" },
+  ]
 
-  await prisma.setting.upsert({
-    where: { key: "company_phone" },
-    update: {},
-    create: { key: "company_phone", value: "+7 (700) 123-45-67" },
-  })
-
-  await prisma.setting.upsert({
-    where: { key: "company_address" },
-    update: {},
-    create: { key: "company_address", value: "г. Алматы, ул. Абая, 1" },
-  })
-
+  for (const setting of settings) {
+    await prisma.setting.upsert({
+      where: { key: setting.key },
+      update: {},
+      create: setting,
+    })
+  }
   console.log(`✅ Настройки созданы`)
 
+  // ========================================
+  // ИТОГ
+  // ========================================
+  
   console.log("\n🎉 База данных успешно заполнена!\n")
-  console.log("Демо-аккаунты:")
+  console.log("═══════════════════════════════════════")
+  console.log("  ДАННЫЕ ДЛЯ ВХОДА:")
+  console.log("═══════════════════════════════════════")
   console.log(`  Админ:    ${adminPhone} / ${adminPassword}`)
   console.log("  Менеджер: +77009876543 / manager123")
-  console.log("  Клиент:   +77005551234 / client123")
+  console.log("═══════════════════════════════════════\n")
 }
 
 main()

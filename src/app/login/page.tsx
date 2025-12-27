@@ -4,16 +4,16 @@
 // СТРАНИЦА ВХОДА — /login
 // ============================================
 
-import { Suspense, useState } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { signIn } from "next-auth/react"
+import { signIn, useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/components/ui/use-toast"
-import { Eye, EyeOff, Loader2, Phone, Lock } from "lucide-react"
+import { Eye, EyeOff, Loader2, Phone, Lock, UserPlus, CheckCircle } from "lucide-react"
 
 // ============================================
 // ФОРМА ВХОДА (использует useSearchParams)
@@ -23,6 +23,7 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
+  const { data: session, status } = useSession()
   
   // Состояние формы
   const [loading, setLoading] = useState(false)
@@ -32,8 +33,38 @@ function LoginForm() {
     password: "",
   })
 
-  // URL для редиректа после входа
-  const callbackUrl = searchParams.get("callbackUrl") || "/cabinet"
+  // Показать сообщение об успешной регистрации
+  const justRegistered = searchParams.get("registered") === "true"
+  const errorParam = searchParams.get("error")
+
+  // Если пользователь уже авторизован — редирект по роли
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      const role = session.user.role
+      if (role === "ADMIN" || role === "MANAGER") {
+        router.push("/admin")
+      } else {
+        router.push("/cabinet")
+      }
+    }
+  }, [status, session, router])
+
+  // Показать уведомление после регистрации
+  useEffect(() => {
+    if (justRegistered) {
+      toast({
+        title: "Регистрация успешна!",
+        description: "Теперь вы можете войти в систему",
+      })
+    }
+    if (errorParam === "Configuration") {
+      toast({
+        variant: "destructive",
+        title: "Ошибка конфигурации",
+        description: "Проверьте настройки AUTH_SECRET в .env.local",
+      })
+    }
+  }, [justRegistered, errorParam, toast])
 
   // Обработка отправки формы
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,17 +86,17 @@ function LoginForm() {
           title: "Ошибка входа",
           description: "Неверный номер телефона или пароль",
         })
+        setLoading(false)
         return
       }
 
-      // Успешный вход
+      // Успешный вход — показываем уведомление
       toast({
         title: "Добро пожаловать!",
         description: "Вы успешно вошли в систему",
       })
 
-      // Редирект
-      router.push(callbackUrl)
+      // Refresh чтобы получить session и выполнить редирект
       router.refresh()
     } catch (error) {
       console.error("Login error:", error)
@@ -74,9 +105,13 @@ function LoginForm() {
         title: "Ошибка",
         description: "Произошла ошибка при входе. Попробуйте позже.",
       })
-    } finally {
       setLoading(false)
     }
+  }
+
+  // Если идёт проверка сессии — показать загрузку
+  if (status === "loading") {
+    return <LoginSkeleton />
   }
 
   return (
@@ -99,6 +134,14 @@ function LoginForm() {
       </CardHeader>
 
       <CardContent>
+        {/* Сообщение после регистрации */}
+        {justRegistered && (
+          <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
+            <CheckCircle className="h-5 w-5" />
+            <span className="text-sm">Регистрация успешна! Войдите в систему.</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Поле телефона */}
           <div className="space-y-2">
@@ -109,7 +152,7 @@ function LoginForm() {
             <Input
               id="phone"
               type="tel"
-              placeholder="+7 (700) 000-00-00"
+              placeholder="89291234567"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               required
@@ -155,7 +198,7 @@ function LoginForm() {
           {/* Кнопка входа */}
           <Button 
             type="submit" 
-            className="w-full h-11 text-base" 
+            className="w-full h-11 text-base bg-[#27ae60] hover:bg-[#2ecc71]" 
             disabled={loading}
           >
             {loading ? (
@@ -169,29 +212,39 @@ function LoginForm() {
           </Button>
         </form>
 
+        {/* Кнопка регистрации */}
+        <div className="mt-4">
+          <Link href="/register">
+            <Button 
+              variant="outline" 
+              className="w-full h-11 text-base border-[#2c3e50] text-[#2c3e50] hover:bg-[#2c3e50] hover:text-white"
+            >
+              <UserPlus className="mr-2 h-5 w-5" />
+              Регистрация
+            </Button>
+          </Link>
+        </div>
+
         {/* Ссылка на главную */}
         <div className="mt-6 text-center">
           <Link 
             href="/" 
-            className="text-sm text-muted-foreground hover:text-primary transition-colors"
+            className="text-sm text-muted-foreground hover:text-[#27ae60] transition-colors"
           >
             ← Вернуться на главную
           </Link>
         </div>
 
-        {/* Демо-данные (только для разработки) */}
-        {process.env.NODE_ENV === "development" && (
-          <div className="mt-6 p-4 bg-muted/50 rounded-lg">
-            <p className="text-xs text-muted-foreground mb-2 font-medium">
-              Демо-аккаунты:
-            </p>
-            <div className="text-xs space-y-1 font-mono">
-              <p>Админ: +77001234567 / admin123</p>
-              <p>Менеджер: +77009876543 / manager123</p>
-              <p>Клиент: +77005551234 / client123</p>
-            </div>
+        {/* Демо-данные */}
+        <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+          <p className="text-xs text-muted-foreground mb-2 font-medium">
+            Демо-аккаунты:
+          </p>
+          <div className="text-xs space-y-1 font-mono">
+            <p>Админ: 89291639595 / Lamaro095</p>
+            <p>Менеджер: +77009876543 / manager123</p>
           </div>
-        )}
+        </div>
       </CardContent>
     </Card>
   )
@@ -223,6 +276,7 @@ function LoginSkeleton() {
           <div className="h-4 w-20 rounded bg-muted animate-pulse" />
           <div className="h-11 w-full rounded bg-muted animate-pulse" />
         </div>
+        <div className="h-11 w-full rounded bg-muted animate-pulse" />
         <div className="h-11 w-full rounded bg-muted animate-pulse" />
       </CardContent>
     </Card>
