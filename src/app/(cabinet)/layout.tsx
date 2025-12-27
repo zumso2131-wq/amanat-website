@@ -30,10 +30,10 @@ export default async function CabinetLayout({
       <aside className="w-64 bg-white border-r flex flex-col">
         <div className="p-6 border-b">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-xl">А</span>
+            <div className="h-10 w-10 rounded-lg bg-[#2c3e50] flex items-center justify-center">
+              <span className="text-white font-bold text-xl">А</span>
             </div>
-            <span className="font-bold text-xl">Аманат</span>
+            <span className="font-bold text-xl text-[#2c3e50]">AMANAT</span>
           </Link>
         </div>
 

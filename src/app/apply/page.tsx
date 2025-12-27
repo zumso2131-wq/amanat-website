@@ -149,7 +149,7 @@ function ApplyForm() {
 
           <Button 
             type="submit" 
-            className="w-full bg-red-600 hover:bg-red-700" 
+            className="w-full bg-[#27ae60] hover:bg-[#2ecc71]" 
             disabled={loading}
           >
             {loading ? (
@@ -181,7 +181,7 @@ export default function ApplyPage() {
       <header className="border-b bg-white">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-red-600 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-lg bg-[#27ae60] flex items-center justify-center">
               <span className="text-white font-bold text-xl">А</span>
             </div>
             <span className="font-bold text-xl">Аманат</span>

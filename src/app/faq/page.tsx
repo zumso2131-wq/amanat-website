@@ -57,13 +57,13 @@ export default function FaqPage() {
       <header className="border-b bg-white">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-red-600 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-lg bg-[#27ae60] flex items-center justify-center">
               <span className="text-white font-bold text-xl">А</span>
             </div>
             <span className="font-bold text-xl">Аманат</span>
           </Link>
           <Link href="/apply">
-            <Button className="bg-red-600 hover:bg-red-700">Оформить заявку</Button>
+            <Button className="bg-[#27ae60] hover:bg-[#2ecc71]">Оформить заявку</Button>
           </Link>
         </div>
       </header>
@@ -75,7 +75,7 @@ export default function FaqPage() {
         </Link>
 
         <div className="flex items-center gap-3 mb-8">
-          <HelpCircle className="h-8 w-8 text-red-600" />
+          <HelpCircle className="h-8 w-8 text-[#27ae60]" />
           <h1 className="text-4xl font-bold">Вопросы и ответы</h1>
         </div>
 
@@ -84,7 +84,7 @@ export default function FaqPage() {
             <Card key={i}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg flex items-start gap-3">
-                  <span className="text-red-600 font-bold">{i + 1}.</span>
+                  <span className="text-[#27ae60] font-bold">{i + 1}.</span>
                   {faq.q}
                 </CardTitle>
               </CardHeader>
@@ -96,7 +96,7 @@ export default function FaqPage() {
         </div>
 
         {/* CTA */}
-        <Card className="mt-12 bg-red-50 border-red-100">
+        <Card className="mt-12 bg-[#27ae60]/10 border-[#27ae60]/100">
           <CardContent className="pt-6 text-center">
             <h3 className="font-bold text-lg mb-2">Не нашли ответ?</h3>
             <p className="text-muted-foreground mb-4">
@@ -107,7 +107,7 @@ export default function FaqPage() {
                 <Button variant="outline">Контакты</Button>
               </Link>
               <Link href="/apply">
-                <Button className="bg-red-600 hover:bg-red-700">Оформить заявку</Button>
+                <Button className="bg-[#27ae60] hover:bg-[#2ecc71]">Оформить заявку</Button>
               </Link>
             </div>
           </CardContent>

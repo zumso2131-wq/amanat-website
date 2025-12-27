@@ -86,13 +86,13 @@ export default function CatalogPage() {
       <header className="border-b bg-white">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-red-600 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-lg bg-[#27ae60] flex items-center justify-center">
               <span className="text-white font-bold text-xl">А</span>
             </div>
             <span className="font-bold text-xl">Аманат</span>
           </Link>
           <Link href="/apply">
-            <Button className="bg-red-600 hover:bg-red-700">Оформить заявку</Button>
+            <Button className="bg-[#27ae60] hover:bg-[#2ecc71]">Оформить заявку</Button>
           </Link>
         </div>
       </header>
@@ -117,7 +117,7 @@ export default function CatalogPage() {
                 key={cat}
                 variant={cat === "Все" ? "default" : "outline"}
                 size="sm"
-                className={cat === "Все" ? "bg-red-600 hover:bg-red-700" : ""}
+                className={cat === "Все" ? "bg-[#27ae60] hover:bg-[#2ecc71]" : ""}
               >
                 {cat}
               </Button>
@@ -135,7 +135,7 @@ export default function CatalogPage() {
               <CardContent className="p-4">
                 <div className="text-xs text-muted-foreground mb-1">{product.category}</div>
                 <h3 className="font-medium mb-2 line-clamp-2">{product.name}</h3>
-                <div className="text-2xl font-bold text-red-600 mb-1">
+                <div className="text-2xl font-bold text-[#27ae60] mb-1">
                   {formatMoney(product.price)}
                 </div>
                 <div className="text-sm text-muted-foreground mb-4">
@@ -143,7 +143,7 @@ export default function CatalogPage() {
                 </div>
                 <div className="flex gap-2">
                   <Link href={`/apply?product=${encodeURIComponent(product.name)}&price=${product.price}`} className="flex-1">
-                    <Button className="w-full bg-red-600 hover:bg-red-700" size="sm">
+                    <Button className="w-full bg-[#27ae60] hover:bg-[#2ecc71]" size="sm">
                       <ShoppingCart className="mr-2 h-4 w-4" />
                       В рассрочку
                     </Button>

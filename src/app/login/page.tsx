@@ -84,10 +84,10 @@ function LoginForm() {
       <CardHeader className="text-center space-y-4">
         {/* Логотип */}
         <Link href="/" className="flex items-center justify-center gap-2">
-          <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-2xl">А</span>
+          <div className="h-12 w-12 rounded-xl bg-[#2c3e50] flex items-center justify-center">
+            <span className="text-white font-bold text-2xl">А</span>
           </div>
-          <span className="font-bold text-3xl">Аманат</span>
+          <span className="font-bold text-3xl text-[#2c3e50]">AMANAT</span>
         </Link>
         
         <div>
@@ -235,7 +235,7 @@ function LoginSkeleton() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#2c3e50]/5 via-white to-[#27ae60]/10 px-4">
       <Suspense fallback={<LoginSkeleton />}>
         <LoginForm />
       </Suspense>

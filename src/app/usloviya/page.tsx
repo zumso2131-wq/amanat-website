@@ -51,13 +51,13 @@ export default function UsloviyaPage() {
       <header className="border-b bg-white">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-red-600 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-lg bg-[#27ae60] flex items-center justify-center">
               <span className="text-white font-bold text-xl">А</span>
             </div>
             <span className="font-bold text-xl">Аманат</span>
           </Link>
           <Link href="/apply">
-            <Button className="bg-red-600 hover:bg-red-700">Оформить заявку</Button>
+            <Button className="bg-[#27ae60] hover:bg-[#2ecc71]">Оформить заявку</Button>
           </Link>
         </div>
       </header>
@@ -88,7 +88,7 @@ export default function UsloviyaPage() {
                 {markupTable.map((row) => (
                   <TableRow key={row.months}>
                     <TableCell className="font-medium">{row.months} месяцев</TableCell>
-                    <TableCell className="font-bold text-red-600">{row.markup}</TableCell>
+                    <TableCell className="font-bold text-[#27ae60]">{row.markup}</TableCell>
                     <TableCell className="text-muted-foreground">{row.note}</TableCell>
                   </TableRow>
                 ))}
@@ -147,10 +147,10 @@ export default function UsloviyaPage() {
                 <strong>Наценка:</strong> 35%
               </p>
               <div className="border-t pt-4">
-                <p><strong>Цена продажи:</strong> 650 000 × 1.35 = <span className="text-red-600 font-bold">877 500 ₸</span></p>
+                <p><strong>Цена продажи:</strong> 650 000 × 1.35 = <span className="text-[#27ae60] font-bold">877 500 ₸</span></p>
                 <p><strong>Первый взнос:</strong> 100 000 ₸</p>
                 <p><strong>К выплате:</strong> 877 500 - 100 000 = <span className="font-bold">777 500 ₸</span></p>
-                <p><strong>Ежемесячный платёж:</strong> 777 500 ÷ 6 ≈ <span className="text-red-600 font-bold">129 583 ₸</span></p>
+                <p><strong>Ежемесячный платёж:</strong> 777 500 ÷ 6 ≈ <span className="text-[#27ae60] font-bold">129 583 ₸</span></p>
               </div>
             </div>
           </CardContent>
@@ -182,7 +182,7 @@ export default function UsloviyaPage() {
               <Button variant="outline" size="lg">Рассчитать</Button>
             </Link>
             <Link href="/apply">
-              <Button size="lg" className="bg-red-600 hover:bg-red-700">Оформить заявку</Button>
+              <Button size="lg" className="bg-[#27ae60] hover:bg-[#2ecc71]">Оформить заявку</Button>
             </Link>
           </div>
         </div>

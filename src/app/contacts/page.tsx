@@ -14,13 +14,13 @@ export default function ContactsPage() {
       <header className="border-b bg-white">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-red-600 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-lg bg-[#27ae60] flex items-center justify-center">
               <span className="text-white font-bold text-xl">А</span>
             </div>
             <span className="font-bold text-xl">Аманат</span>
           </Link>
           <Link href="/apply">
-            <Button className="bg-red-600 hover:bg-red-700">Оформить заявку</Button>
+            <Button className="bg-[#27ae60] hover:bg-[#2ecc71]">Оформить заявку</Button>
           </Link>
         </div>
       </header>
@@ -38,12 +38,12 @@ export default function ContactsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Phone className="h-5 w-5 text-red-600" />
+                <Phone className="h-5 w-5 text-[#27ae60]" />
                 Телефон
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <a href="tel:+77001234567" className="text-2xl font-bold text-red-600 hover:underline">
+              <a href="tel:+77001234567" className="text-2xl font-bold text-[#27ae60] hover:underline">
                 +7 (700) 123-45-67
               </a>
               <p className="text-muted-foreground mt-2">
@@ -74,12 +74,12 @@ export default function ContactsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5 text-red-600" />
+                <Mail className="h-5 w-5 text-[#27ae60]" />
                 Email
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <a href="mailto:info@amanat.kz" className="text-2xl font-bold text-red-600 hover:underline">
+              <a href="mailto:info@amanat.kz" className="text-2xl font-bold text-[#27ae60] hover:underline">
                 info@amanat.kz
               </a>
               <p className="text-muted-foreground mt-2">
@@ -92,7 +92,7 @@ export default function ContactsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-red-600" />
+                <Clock className="h-5 w-5 text-[#27ae60]" />
                 Режим работы
               </CardTitle>
             </CardHeader>
@@ -109,7 +109,7 @@ export default function ContactsPage() {
         <Card className="mt-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <MapPin className="h-5 w-5 text-red-600" />
+              <MapPin className="h-5 w-5 text-[#27ae60]" />
               Адрес офиса
             </CardTitle>
           </CardHeader>
@@ -131,7 +131,7 @@ export default function ContactsPage() {
         <div className="mt-12 text-center">
           <p className="text-lg mb-4">Готовы оформить рассрочку?</p>
           <Link href="/apply">
-            <Button size="lg" className="bg-red-600 hover:bg-red-700">
+            <Button size="lg" className="bg-[#27ae60] hover:bg-[#2ecc71]">
               Оформить заявку
             </Button>
           </Link>

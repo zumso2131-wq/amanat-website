@@ -65,13 +65,13 @@ export default function CalculatorPage() {
       <header className="border-b bg-white">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-red-600 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-lg bg-[#2c3e50] flex items-center justify-center">
               <span className="text-white font-bold text-xl">А</span>
             </div>
-            <span className="font-bold text-xl">Аманат</span>
+            <span className="font-bold text-xl text-[#2c3e50]">AMANAT</span>
           </Link>
           <Link href="/apply">
-            <Button className="bg-red-600 hover:bg-red-700">Оформить заявку</Button>
+            <Button className="bg-[#27ae60] hover:bg-[#2ecc71]">Оформить заявку</Button>
           </Link>
         </div>
       </header>
@@ -83,8 +83,8 @@ export default function CalculatorPage() {
         </Link>
 
         <div className="flex items-center gap-3 mb-8">
-          <Calculator className="h-8 w-8 text-red-600" />
-          <h1 className="text-4xl font-bold">Калькулятор рассрочки</h1>
+          <Calculator className="h-8 w-8 text-[#27ae60]" />
+          <h1 className="text-4xl font-bold text-[#2c3e50]">Калькулятор рассрочки</h1>
         </div>
 
         <div className="grid grid-cols-2 gap-8">
@@ -202,7 +202,7 @@ export default function CalculatorPage() {
 
                     <div className="border-t pt-4">
                       <div className="text-sm text-muted-foreground">Цена с наценкой</div>
-                      <div className="text-3xl font-bold text-red-600">{formatMoney(calculation.salePrice)}</div>
+                      <div className="text-3xl font-bold text-[#27ae60]">{formatMoney(calculation.salePrice)}</div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
@@ -216,9 +216,9 @@ export default function CalculatorPage() {
                       </div>
                     </div>
 
-                    <div className="bg-red-50 rounded-lg p-4 text-center">
+                    <div className="bg-[#27ae60]/10 rounded-lg p-4 text-center">
                       <div className="text-sm text-muted-foreground mb-1">Ежемесячный платёж</div>
-                      <div className="text-4xl font-bold text-red-600">
+                      <div className="text-4xl font-bold text-[#27ae60]">
                         ~{formatMoney(calculation.monthlyBasePayment)}
                       </div>
                       <div className="text-sm text-muted-foreground mt-1">
@@ -255,7 +255,7 @@ export default function CalculatorPage() {
 
                 {/* CTA */}
                 <Link href="/apply">
-                  <Button size="lg" className="w-full bg-red-600 hover:bg-red-700">
+                  <Button size="lg" className="w-full bg-[#27ae60] hover:bg-[#2ecc71]">
                     Оформить заявку
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
