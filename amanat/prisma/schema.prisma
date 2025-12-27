@@ -1,5 +1,7 @@
-// Prisma schema для системы "Аманат"
+// ============================================
+// PRISMA SCHEMA — СИСТЕМА "АМАНАТ"
 // Рассрочка товаров с полным учётом
+// ============================================
 
 generator client {
   provider = "prisma-client-js"
@@ -14,264 +16,330 @@ datasource db {
 // ENUMS
 // ============================================
 
+// Роли пользователей системы
 enum Role {
-  ADMIN
-  MANAGER
-  CLIENT
+  ADMIN    // Администратор — полный доступ
+  MANAGER  // Менеджер — работа с клиентами и сделками
+  CLIENT   // Клиент — только личный кабинет
 }
 
+// Статус сделки
 enum DealStatus {
-  DRAFT
-  ACTIVE
-  CLOSED
-  CANCELED
+  DRAFT    // Черновик — не активна
+  ACTIVE   // Активна — идут платежи
+  CLOSED   // Закрыта — полностью оплачена
+  CANCELED // Отменена
 }
 
+// Статус платежа в графике
 enum InstallmentStatus {
-  DUE
-  PAID
-  OVERDUE
+  DUE     // Ожидает оплаты
+  PAID    // Оплачен
+  OVERDUE // Просрочен
 }
 
+// Способ оплаты
 enum PaymentMethod {
-  CASH
-  CARD
-  TRANSFER
+  CASH     // Наличные
+  CARD     // Карта
+  TRANSFER // Банковский перевод
 }
 
+// Тип документа
 enum DocumentType {
-  CONTRACT
-  SCHEDULE
+  CONTRACT // Договор рассрочки
+  SCHEDULE // График платежей
 }
 
+// Статус уведомления
 enum NotificationStatus {
-  PENDING
-  SENT
-  READ
+  PENDING // Ожидает отправки
+  SENT    // Отправлено
+  READ    // Прочитано
 }
 
+// Тип уведомления
 enum NotificationType {
-  PAYMENT_DUE
-  PAYMENT_OVERDUE
-  DEAL_CREATED
-  DEAL_APPROVED
-  SYSTEM
+  PAYMENT_DUE     // Напоминание о платеже
+  PAYMENT_OVERDUE // Просрочка платежа
+  DEAL_CREATED    // Сделка создана
+  DEAL_APPROVED   // Сделка одобрена
+  SYSTEM          // Системное уведомление
 }
 
 // ============================================
-// MODELS
+// МОДЕЛИ
 // ============================================
 
-// Пользователь системы (админ, менеджер, клиент-пользователь)
+// ----------------------------------------
+// User — Пользователь системы
+// ----------------------------------------
+// Пользователи для входа в систему (админы, менеджеры, клиенты)
 model User {
   id           String   @id @default(cuid())
   role         Role     @default(CLIENT)
-  phone        String   @unique
-  passwordHash String
-  fullName     String
-  email        String?
-  isActive     Boolean  @default(true)
+  phone        String   @unique          // Телефон для входа
+  passwordHash String                     // Хеш пароля (bcrypt)
+  fullName     String                     // ФИО
+  email        String?                    // Email (опционально)
+  isActive     Boolean  @default(true)   // Активен ли аккаунт
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   // Связи
-  createdDeals   Deal[]         @relation("CreatedByUser")
-  notifications  Notification[]
-  auditLogs      AuditLog[]
+  createdDeals  Deal[]         @relation("CreatedByUser") // Сделки, созданные пользователем
+  notifications Notification[]                            // Уведомления пользователя
+  auditLogs     AuditLog[]                                // Действия пользователя в логе
 
   @@map("users")
 }
 
-// Клиент (покупатель товара в рассрочку)
+// ----------------------------------------
+// Client — Клиент (покупатель)
+// ----------------------------------------
+// Клиент, оформляющий рассрочку на товар
 model Client {
   id               String    @id @default(cuid())
-  fullName         String
-  phone            String    @unique
-  iin              String?   // ИИН (Казахстан) или идентификатор
-  passportNumber   String?
-  passportIssuedBy String?
-  passportIssuedAt DateTime?
-  address          String?
-  note             String?
+  fullName         String                          // ФИО клиента
+  phone            String    @unique               // Телефон (уникальный)
+  iin              String?                         // ИИН (Казахстан)
+  passportNumber   String?                         // Номер паспорта
+  passportIssuedBy String?                         // Кем выдан паспорт
+  passportIssuedAt DateTime?                       // Дата выдачи паспорта
+  address          String?                         // Адрес проживания
+  note             String?                         // Примечание менеджера
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   // Связи
-  deals Deal[]
+  deals Deal[] // Сделки клиента
 
   @@map("clients")
 }
 
-// Товар (каталог товаров)
+// ----------------------------------------
+// Product — Товар (каталог)
+// ----------------------------------------
+// Товары для продажи в рассрочку
 model Product {
   id                   String   @id @default(cuid())
-  name                 String
-  sku                  String   @unique // артикул
-  category             String?
-  description          String?
-  defaultPurchasePrice Int      // цена закупа в тенге (целое число)
-  imageUrl             String?
-  isActive             Boolean  @default(true)
+  name                 String                        // Название товара
+  sku                  String   @unique              // Артикул (уникальный)
+  category             String?                       // Категория
+  description          String?                       // Описание
+  defaultPurchasePrice Int                           // Цена закупа по умолчанию (тенге)
+  imageUrl             String?                       // URL изображения
+  isActive             Boolean  @default(true)      // Активен ли товар
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
   @@map("products")
 }
 
-// Сделка (оформление рассрочки)
+// ----------------------------------------
+// Deal — Сделка (оформление рассрочки)
+// ----------------------------------------
+// Главная сущность — оформленная рассрочка на товар
 model Deal {
-  id                    String     @id @default(cuid())
-  dealNumber            String     @unique // номер сделки для документов
-  clientId              String
-  client                Client     @relation(fields: [clientId], references: [id])
-  
+  id        String @id @default(cuid())
+  dealNumber String @unique              // Номер сделки (AM-2412-0001)
+
+  // Связь с клиентом
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
   // Информация о товаре
-  productName           String
-  productSku            String?
-  
-  // Финансовые условия
-  purchasePrice         Int        // цена закупа
-  markupPercentFinal    Int        // итоговая наценка %
-  salePrice             Int        // цена продажи (закуп * (1 + наценка/100))
-  downPayment           Int        // первоначальный взнос
-  amountToFinance       Int        // сумма к выплате (salePrice - downPayment)
-  
-  // Условия рассрочки
-  months                Int        // срок рассрочки (3-12 месяцев)
-  startDate             DateTime   // дата выдачи товара
-  
-  // Расчёт платежей
-  monthlyBasePayment    Int        // базовый ежемесячный платёж (floor(amountToFinance/months))
-  lastPaymentAdjustment Int        // корректировка последнего платежа (остаток)
-  
-  // Статус
-  status                DealStatus @default(DRAFT)
-  
-  // Метаданные
-  createdByUserId       String
-  createdByUser         User       @relation("CreatedByUser", fields: [createdByUserId], references: [id])
-  createdAt             DateTime   @default(now())
-  updatedAt             DateTime   @updatedAt
+  productName String  // Название товара
+  productSku  String? // Артикул товара
+
+  // ========================================
+  // ФИНАНСОВЫЕ УСЛОВИЯ (бизнес-логика Amanat)
+  // ========================================
+  purchasePrice      Int // Цена закупа (тенге)
+  markupPercentFinal Int // Итоговая наценка (%)
+                         // 3 мес: >= 15% (редактируемая)
+                         // 5 мес: 25% (фикс)
+                         // 6 мес: 35% (фикс)
+                         // 7-12 мес: 35 + (months-6)*5
+
+  salePrice       Int // Цена продажи = round(purchasePrice * (1 + markupPercentFinal/100))
+  downPayment     Int // Первоначальный взнос (0 <= downPayment < salePrice)
+  amountToFinance Int // Сумма к выплате = salePrice - downPayment
+
+  // ========================================
+  // УСЛОВИЯ РАССРОЧКИ
+  // ========================================
+  months    Int      // Срок рассрочки (3-12 месяцев)
+  startDate DateTime // Дата выдачи товара клиенту
+
+  // Расчёт платежей (округление графика)
+  monthlyBasePayment    Int // Базовый платёж = floor(amountToFinance / months)
+  lastPaymentAdjustment Int // Корректировка последнего = amountToFinance - base * months
+
+  // Статус сделки
+  status DealStatus @default(DRAFT)
+
+  // Кто создал сделку
+  createdByUserId String
+  createdByUser   User   @relation("CreatedByUser", fields: [createdByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Связи
-  installments Installment[]
-  payments     Payment[]
-  documents    Document[]
+  installments Installment[] // График платежей
+  payments     Payment[]     // Фактические платежи
+  documents    Document[]    // Документы (договор, график)
 
   @@map("deals")
 }
 
-// График платежей (рассрочка)
+// ----------------------------------------
+// Installment — График платежей
+// ----------------------------------------
+// Плановые платежи по сделке (создаются при оформлении, НЕ пересчитываются)
 model Installment {
-  id       String            @id @default(cuid())
-  dealId   String
-  deal     Deal              @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  
-  index    Int               // номер платежа (1, 2, 3...)
-  dueDate  DateTime          // дата платежа
-  amount   Int               // сумма платежа
-  status   InstallmentStatus @default(DUE)
-  paidAt   DateTime?         // дата фактической оплаты
+  id     String @id @default(cuid())
+  dealId String
+  deal   Deal   @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  // ========================================
+  // ДАННЫЕ ПЛАТЕЖА В ГРАФИКЕ
+  // ========================================
+  index   Int               // Номер платежа (1, 2, 3... до months)
+  dueDate DateTime          // Дата платежа = startDate + 30 * index дней
+  amount  Int               // Сумма платежа (base для 1..months-1, base+remainder для last)
+  status  InstallmentStatus @default(DUE) // DUE -> PAID или OVERDUE
+  paidAt  DateTime?         // Дата фактической оплаты (когда status стал PAID)
 
   // Связи
-  payments Payment[]
+  payments Payment[] // Платежи, привязанные к этому пункту графика
 
-  @@unique([dealId, index])
+  @@unique([dealId, index]) // Уникальность: одна сделка — один индекс
   @@map("installments")
 }
 
-// Платеж (фактическая оплата)
+// ----------------------------------------
+// Payment — Фактический платёж
+// ----------------------------------------
+// Запись о принятом платеже (НЕ меняет график задним числом)
 model Payment {
-  id            String        @id @default(cuid())
-  dealId        String
-  deal          Deal          @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  dealId String
+  deal   Deal   @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  // Привязка к пункту графика (опционально)
   installmentId String?
-  installment   Installment?  @relation(fields: [installmentId], references: [id])
-  
-  amount        Int           // сумма платежа
-  paidAt        DateTime      @default(now())
-  method        PaymentMethod @default(CASH)
-  comment       String?
-  
-  createdAt     DateTime      @default(now())
+  installment   Installment? @relation(fields: [installmentId], references: [id])
+
+  // Данные платежа
+  amount  Int           // Сумма платежа (тенге)
+  paidAt  DateTime      @default(now()) // Дата/время оплаты
+  method  PaymentMethod @default(CASH)  // Способ оплаты
+  comment String?       // Комментарий
+
+  createdAt DateTime @default(now())
 
   @@map("payments")
 }
 
-// Документ (договор, график)
+// ----------------------------------------
+// Document — Документ
+// ----------------------------------------
+// Документы по сделке (договор, график платежей)
 model Document {
-  id            String       @id @default(cuid())
-  dealId        String
-  deal          Deal         @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  
-  type          DocumentType
-  filePathOrUrl String
-  fileName      String?
-  
-  createdAt     DateTime     @default(now())
+  id     String @id @default(cuid())
+  dealId String
+  deal   Deal   @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  type          DocumentType // CONTRACT или SCHEDULE
+  filePathOrUrl String       // Путь к файлу или URL
+  fileName      String?      // Имя файла
+
+  createdAt DateTime @default(now())
 
   @@map("documents")
 }
 
-// Уведомление
+// ----------------------------------------
+// Notification — Уведомление
+// ----------------------------------------
+// Уведомления для пользователей
 model Notification {
-  id          String             @id @default(cuid())
-  userId      String
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  type        NotificationType
-  title       String
-  message     String
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type        NotificationType   // Тип уведомления
+  title       String             // Заголовок
+  message     String             // Текст сообщения
   payloadJson String?            // JSON с дополнительными данными
   status      NotificationStatus @default(PENDING)
-  
-  createdAt   DateTime           @default(now())
-  readAt      DateTime?
+
+  createdAt DateTime  @default(now())
+  readAt    DateTime? // Когда прочитано
 
   @@map("notifications")
 }
 
-// Лог действий (аудит)
+// ----------------------------------------
+// AuditLog — Журнал аудита
+// ----------------------------------------
+// Лог всех действий в системе (кто/что/когда)
 model AuditLog {
-  id          String   @id @default(cuid())
-  actorUserId String?
-  actorUser   User?    @relation(fields: [actorUserId], references: [id])
-  
-  entity      String   // название сущности (Client, Deal, Payment...)
-  entityId    String   // ID записи
-  action      String   // CREATE, UPDATE, DELETE
-  diffJson    String?  // JSON с изменениями {before, after}
-  
-  ipAddress   String?
-  userAgent   String?
-  
-  createdAt   DateTime @default(now())
+  id          String  @id @default(cuid())
+  actorUserId String? // Кто выполнил действие (null = система)
+  actorUser   User?   @relation(fields: [actorUserId], references: [id])
 
+  // ========================================
+  // ЧТО ИЗМЕНИЛОСЬ
+  // ========================================
+  entity   String  // Название сущности: Client, Deal, Payment...
+  entityId String  // ID изменённой записи
+  action   String  // Действие: CREATE, UPDATE, DELETE
+  diffJson String? // JSON: { before: {...}, after: {...} }
+
+  // Дополнительно
+  ipAddress String? // IP адрес
+  userAgent String? // User-Agent браузера
+
+  createdAt DateTime @default(now()) // Когда
+
+  // Индексы для быстрого поиска
   @@index([entity, entityId])
   @@index([actorUserId])
   @@index([createdAt])
   @@map("audit_logs")
 }
 
-// Заявка с сайта
+// ----------------------------------------
+// Application — Заявка с сайта
+// ----------------------------------------
+// Заявки от посетителей публичного сайта
 model Application {
-  id        String   @id @default(cuid())
-  fullName  String
-  phone     String
-  product   String?
-  message   String?
-  status    String   @default("NEW") // NEW, PROCESSING, COMPLETED, REJECTED
+  id       String @id @default(cuid())
+  fullName String // Имя заявителя
+  phone    String // Телефон
+  product  String? // Интересующий товар
+  message  String? // Сообщение
+
+  status String @default("NEW") // NEW, PROCESSING, COMPLETED, REJECTED
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("applications")
 }
 
-// Настройки системы
+// ----------------------------------------
+// Setting — Настройки системы
+// ----------------------------------------
+// Ключ-значение для настроек
 model Setting {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  value     String
+  id    String @id @default(cuid())
+  key   String @unique // Ключ настройки
+  value String         // Значение
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
