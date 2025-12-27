@@ -1,0 +1,170 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  CLIENT
+}
+
+enum DealStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  CANCELED
+}
+
+enum InstallmentStatus {
+  DUE
+  PAID
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+}
+
+enum DocumentType {
+  CONTRACT
+  SCHEDULE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  role          Role      @default(CLIENT)
+  phone         String    @unique
+  passwordHash  String
+  fullName      String
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+
+  // Relations
+  dealsCreated  Deal[]    @relation("DealsCreated")
+  auditLogs     AuditLog[]
+  notifications Notification[]
+}
+
+model Client {
+  id               String   @id @default(cuid())
+  fullName         String
+  phone            String   @unique
+  passportNumber   String?
+  passportIssuedBy String?
+  passportIssuedAt DateTime?
+  address          String?
+  note             String?
+  createdAt        DateTime @default(now())
+
+  deals Deal[]
+}
+
+model Product {
+  id                   String   @id @default(cuid())
+  name                 String
+  sku                  String   @unique
+  category             String?
+  defaultPurchasePrice Float
+  createdAt            DateTime @default(now())
+}
+
+model Deal {
+  id                  String     @id @default(cuid())
+  clientId            String
+  client              Client     @relation(fields: [clientId], references: [id])
+  
+  productName         String
+  purchasePrice       Float
+  markupPercentFinal  Float
+  salePrice           Float
+  downPayment         Float
+  amountToFinance     Float
+  
+  months              Int
+  startDate           DateTime
+  
+  monthlyBasePayment  Float
+  lastPaymentAdjustment Float // Correction for the last month to match total
+  
+  status              DealStatus @default(DRAFT)
+  
+  createdByUserId     String
+  createdByUser       User       @relation("DealsCreated", fields: [createdByUserId], references: [id])
+  
+  createdAt           DateTime   @default(now())
+  
+  installments        Installment[]
+  payments            Payment[]
+  documents           Document[]
+}
+
+model Installment {
+  id        String            @id @default(cuid())
+  dealId    String
+  deal      Deal              @relation(fields: [dealId], references: [id])
+  
+  index     Int               // 1, 2, ... months
+  dueDate   DateTime
+  amount    Float
+  status    InstallmentStatus @default(DUE)
+  paidAt    DateTime?
+  
+  payments  Payment[]
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  dealId        String
+  deal          Deal          @relation(fields: [dealId], references: [id])
+  
+  installmentId String?
+  installment   Installment?  @relation(fields: [installmentId], references: [id])
+  
+  amount        Float
+  paidAt        DateTime      @default(now())
+  method        PaymentMethod
+  comment       String?
+}
+
+model Document {
+  id            String       @id @default(cuid())
+  dealId        String
+  deal          Deal         @relation(fields: [dealId], references: [id])
+  
+  type          DocumentType
+  filePathOrUrl String
+  createdAt     DateTime     @default(now())
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  type        String
+  payloadJson Json
+  status      String   // READ, UNREAD
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String
+  actorUser   User     @relation(fields: [actorUserId], references: [id])
+  
+  entity      String   // "Deal", "Client", etc.
+  entityId    String
+  action      String   // "CREATE", "UPDATE", "DELETE"
+  diffJson    Json?    // Before/After or specific changes
+  createdAt   DateTime @default(now())
+}
