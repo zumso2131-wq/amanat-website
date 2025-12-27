@@ -1,0 +1,279 @@
+// Prisma schema для системы "Аманат"
+// Рассрочка товаров с полным учётом
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Role {
+  ADMIN
+  MANAGER
+  CLIENT
+}
+
+enum DealStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  CANCELED
+}
+
+enum InstallmentStatus {
+  DUE
+  PAID
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+}
+
+enum DocumentType {
+  CONTRACT
+  SCHEDULE
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  READ
+}
+
+enum NotificationType {
+  PAYMENT_DUE
+  PAYMENT_OVERDUE
+  DEAL_CREATED
+  DEAL_APPROVED
+  SYSTEM
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+// Пользователь системы (админ, менеджер, клиент-пользователь)
+model User {
+  id           String   @id @default(cuid())
+  role         Role     @default(CLIENT)
+  phone        String   @unique
+  passwordHash String
+  fullName     String
+  email        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Связи
+  createdDeals   Deal[]         @relation("CreatedByUser")
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+// Клиент (покупатель товара в рассрочку)
+model Client {
+  id               String    @id @default(cuid())
+  fullName         String
+  phone            String    @unique
+  iin              String?   // ИИН (Казахстан) или идентификатор
+  passportNumber   String?
+  passportIssuedBy String?
+  passportIssuedAt DateTime?
+  address          String?
+  note             String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Связи
+  deals Deal[]
+
+  @@map("clients")
+}
+
+// Товар (каталог товаров)
+model Product {
+  id                   String   @id @default(cuid())
+  name                 String
+  sku                  String   @unique // артикул
+  category             String?
+  description          String?
+  defaultPurchasePrice Int      // цена закупа в тенге (целое число)
+  imageUrl             String?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("products")
+}
+
+// Сделка (оформление рассрочки)
+model Deal {
+  id                    String     @id @default(cuid())
+  dealNumber            String     @unique // номер сделки для документов
+  clientId              String
+  client                Client     @relation(fields: [clientId], references: [id])
+  
+  // Информация о товаре
+  productName           String
+  productSku            String?
+  
+  // Финансовые условия
+  purchasePrice         Int        // цена закупа
+  markupPercentFinal    Int        // итоговая наценка %
+  salePrice             Int        // цена продажи (закуп * (1 + наценка/100))
+  downPayment           Int        // первоначальный взнос
+  amountToFinance       Int        // сумма к выплате (salePrice - downPayment)
+  
+  // Условия рассрочки
+  months                Int        // срок рассрочки (3-12 месяцев)
+  startDate             DateTime   // дата выдачи товара
+  
+  // Расчёт платежей
+  monthlyBasePayment    Int        // базовый ежемесячный платёж (floor(amountToFinance/months))
+  lastPaymentAdjustment Int        // корректировка последнего платежа (остаток)
+  
+  // Статус
+  status                DealStatus @default(DRAFT)
+  
+  // Метаданные
+  createdByUserId       String
+  createdByUser         User       @relation("CreatedByUser", fields: [createdByUserId], references: [id])
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  // Связи
+  installments Installment[]
+  payments     Payment[]
+  documents    Document[]
+
+  @@map("deals")
+}
+
+// График платежей (рассрочка)
+model Installment {
+  id       String            @id @default(cuid())
+  dealId   String
+  deal     Deal              @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  
+  index    Int               // номер платежа (1, 2, 3...)
+  dueDate  DateTime          // дата платежа
+  amount   Int               // сумма платежа
+  status   InstallmentStatus @default(DUE)
+  paidAt   DateTime?         // дата фактической оплаты
+
+  // Связи
+  payments Payment[]
+
+  @@unique([dealId, index])
+  @@map("installments")
+}
+
+// Платеж (фактическая оплата)
+model Payment {
+  id            String        @id @default(cuid())
+  dealId        String
+  deal          Deal          @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  installmentId String?
+  installment   Installment?  @relation(fields: [installmentId], references: [id])
+  
+  amount        Int           // сумма платежа
+  paidAt        DateTime      @default(now())
+  method        PaymentMethod @default(CASH)
+  comment       String?
+  
+  createdAt     DateTime      @default(now())
+
+  @@map("payments")
+}
+
+// Документ (договор, график)
+model Document {
+  id            String       @id @default(cuid())
+  dealId        String
+  deal          Deal         @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  
+  type          DocumentType
+  filePathOrUrl String
+  fileName      String?
+  
+  createdAt     DateTime     @default(now())
+
+  @@map("documents")
+}
+
+// Уведомление
+model Notification {
+  id          String             @id @default(cuid())
+  userId      String
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type        NotificationType
+  title       String
+  message     String
+  payloadJson String?            // JSON с дополнительными данными
+  status      NotificationStatus @default(PENDING)
+  
+  createdAt   DateTime           @default(now())
+  readAt      DateTime?
+
+  @@map("notifications")
+}
+
+// Лог действий (аудит)
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actorUser   User?    @relation(fields: [actorUserId], references: [id])
+  
+  entity      String   // название сущности (Client, Deal, Payment...)
+  entityId    String   // ID записи
+  action      String   // CREATE, UPDATE, DELETE
+  diffJson    String?  // JSON с изменениями {before, after}
+  
+  ipAddress   String?
+  userAgent   String?
+  
+  createdAt   DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([actorUserId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// Заявка с сайта
+model Application {
+  id        String   @id @default(cuid())
+  fullName  String
+  phone     String
+  product   String?
+  message   String?
+  status    String   @default("NEW") // NEW, PROCESSING, COMPLETED, REJECTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("applications")
+}
+
+// Настройки системы
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
