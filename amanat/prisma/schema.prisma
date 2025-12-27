@@ -1,0 +1,295 @@
+// Prisma schema для системы "Аманат"
+// Полная схема БД с поддержкой всех сущностей
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ПОЛЬЗОВАТЕЛИ И РОЛИ
+// ============================================
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  CLIENT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  role         UserRole @default(CLIENT)
+  phone        String   @unique
+  passwordHash String
+  fullName     String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Связи
+  client        Client?
+  dealsCreated  Deal[]         @relation("DealCreatedBy")
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  @@index([phone])
+  @@index([role])
+  @@map("users")
+}
+
+// ============================================
+// КЛИЕНТЫ
+// ============================================
+
+model Client {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  fullName         String
+  phone            String
+  passportNumber   String?
+  passportIssuedBy String?
+  passportIssuedAt DateTime?
+  address          String?
+  note             String?   @db.Text
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Связи
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deals Deal[]
+
+  @@index([phone])
+  @@index([fullName])
+  @@map("clients")
+}
+
+// ============================================
+// ТОВАРЫ
+// ============================================
+
+model Product {
+  id                   String   @id @default(cuid())
+  name                 String
+  sku                  String?  @unique
+  category             String?
+  defaultPurchasePrice Decimal  @db.Decimal(12, 2)
+  description          String?  @db.Text
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([name])
+  @@index([category])
+  @@map("products")
+}
+
+// ============================================
+// СДЕЛКИ
+// ============================================
+
+enum DealStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  CANCELED
+}
+
+model Deal {
+  id                   String     @id @default(cuid())
+  clientId             String
+  productName          String
+  purchasePrice        Decimal    @db.Decimal(12, 2)
+  markupPercentFinal   Decimal    @db.Decimal(5, 2)
+  salePrice            Decimal    @db.Decimal(12, 2)
+  downPayment          Decimal    @db.Decimal(12, 2)
+  amountToFinance      Decimal    @db.Decimal(12, 2)
+  months               Int
+  startDate            DateTime
+  monthlyBasePayment   Decimal    @db.Decimal(12, 2)
+  lastPaymentAdjustment Decimal   @db.Decimal(12, 2)
+  status               DealStatus @default(DRAFT)
+  createdByUserId      String
+  note                 String?    @db.Text
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  // Связи
+  client       Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdBy    User          @relation("DealCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  installments Installment[]
+  payments     Payment[]
+  documents    Document[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([startDate])
+  @@index([createdByUserId])
+  @@map("deals")
+}
+
+// ============================================
+// ГРАФИК ПЛАТЕЖЕЙ
+// ============================================
+
+enum InstallmentStatus {
+  DUE
+  PAID
+  OVERDUE
+}
+
+model Installment {
+  id      String            @id @default(cuid())
+  dealId  String
+  index   Int // 1, 2, 3...months
+  dueDate DateTime
+  amount  Decimal           @db.Decimal(12, 2)
+  status  InstallmentStatus @default(DUE)
+  paidAt  DateTime?
+
+  // Связи
+  deal     Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@unique([dealId, index])
+  @@index([dueDate])
+  @@index([status])
+  @@map("installments")
+}
+
+// ============================================
+// ПЛАТЕЖИ
+// ============================================
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  dealId        String
+  installmentId String?
+  amount        Decimal       @db.Decimal(12, 2)
+  paidAt        DateTime      @default(now())
+  method        PaymentMethod
+  comment       String?       @db.Text
+  createdAt     DateTime      @default(now())
+
+  // Связи
+  deal        Deal         @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  installment Installment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
+
+  @@index([dealId])
+  @@index([paidAt])
+  @@map("payments")
+}
+
+// ============================================
+// ДОКУМЕНТЫ
+// ============================================
+
+enum DocumentType {
+  CONTRACT
+  SCHEDULE
+  OTHER
+}
+
+model Document {
+  id             String       @id @default(cuid())
+  dealId         String
+  type           DocumentType
+  filePathOrUrl  String
+  originalName   String?
+  createdAt      DateTime     @default(now())
+
+  // Связи
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@index([type])
+  @@map("documents")
+}
+
+// ============================================
+// УВЕДОМЛЕНИЯ
+// ============================================
+
+enum NotificationType {
+  PAYMENT_DUE
+  PAYMENT_OVERDUE
+  DEAL_CREATED
+  DEAL_CLOSED
+  SYSTEM
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+model Notification {
+  id          String             @id @default(cuid())
+  userId      String
+  type        NotificationType
+  title       String
+  message     String             @db.Text
+  payloadJson String?            @db.Text
+  status      NotificationStatus @default(UNREAD)
+  createdAt   DateTime           @default(now())
+
+  // Связи
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ============================================
+// AUDIT LOG
+// ============================================
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+model AuditLog {
+  id           String      @id @default(cuid())
+  actorUserId  String
+  entity       String // "Deal", "Client", "Payment", etc.
+  entityId     String
+  action       AuditAction
+  diffJson     String?     @db.Text
+  createdAt    DateTime    @default(now())
+
+  // Связи
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([entity, entityId])
+  @@index([actorUserId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================
+// НАСТРОЙКИ СИСТЕМЫ
+// ============================================
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
