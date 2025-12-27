@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireManager } from "@/lib/auth"
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     await requireManager()
 
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Расчёты
-    let totalDeals = deals.length
+    const totalDeals = deals.length
     let activeDeals = 0
     let closedDeals = 0
     let totalProfit = 0    // прибыль = sum(salePrice - purchasePrice)

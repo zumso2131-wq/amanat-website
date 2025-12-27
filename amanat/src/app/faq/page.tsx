@@ -5,7 +5,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, HelpCircle, ChevronDown } from "lucide-react"
+import { ArrowLeft, HelpCircle } from "lucide-react"
 
 const faqs = [
   {

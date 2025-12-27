@@ -5,7 +5,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { formatMoney, formatDate, getDaysOverdue } from "@/lib/calculations"
+import { formatMoney, formatDate } from "@/lib/calculations"
 import { CreditCard, Calendar, AlertTriangle, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"

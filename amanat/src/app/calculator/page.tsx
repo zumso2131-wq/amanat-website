@@ -4,7 +4,7 @@
 // КАЛЬКУЛЯТОР — /calculator
 // ============================================
 
-import { useState, useEffect } from "react"
+import { useState, useMemo } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,16 +34,11 @@ export default function CalculatorPage() {
   const [months, setMonths] = useState(6)
   const [downPayment, setDownPayment] = useState(0)
   const [customMarkup, setCustomMarkup] = useState(15)
-  const [calculation, setCalculation] = useState<ReturnType<typeof calculateDeal> | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  // Пересчёт
-  useEffect(() => {
+  // Расчёт (useMemo вместо useEffect для derived state)
+  const { calculation, error } = useMemo(() => {
     try {
-      setError(null)
       if (purchasePrice <= 0) {
-        setCalculation(null)
-        return
+        return { calculation: null, error: null }
       }
 
       const calc = calculateDeal({
@@ -53,15 +48,16 @@ export default function CalculatorPage() {
         startDate: new Date(),
         customMarkup: months === 3 ? customMarkup : undefined,
       })
-      setCalculation(calc)
+      return { calculation: calc, error: null }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Ошибка расчёта")
-      setCalculation(null)
+      return { 
+        calculation: null, 
+        error: e instanceof Error ? e.message : "Ошибка расчёта" 
+      }
     }
   }, [purchasePrice, months, downPayment, customMarkup])
 
   const markupEditable = isMarkupEditable(months)
-  const currentMarkup = markupEditable ? customMarkup : getMarkupPercent(months)
 
   return (
     <div className="min-h-screen bg-gray-50">

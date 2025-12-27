@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireManager } from "@/lib/auth"
-import { formatDate, formatMoney } from "@/lib/calculations"
+import { formatDate } from "@/lib/calculations"
 
 function escapeCSV(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return ""

@@ -118,7 +118,7 @@ export default function ContactsPage() {
               г. Алматы, ул. Абая, 1
             </p>
             <p className="text-muted-foreground mb-4">
-              Бизнес-центр "Аманат", 2 этаж, офис 201
+              Бизнес-центр &quot;Аманат&quot;, 2 этаж, офис 201
             </p>
             {/* Карта-заглушка */}
             <div className="h-64 bg-gray-200 rounded-lg flex items-center justify-center">

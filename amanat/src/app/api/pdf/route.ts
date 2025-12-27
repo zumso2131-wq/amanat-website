@@ -110,8 +110,6 @@ function generateContractHTML(deal: {
     amount: number
   }>
 }): string {
-  const profit = deal.salePrice - deal.purchasePrice
-
   return `
 <!DOCTYPE html>
 <html lang="ru">

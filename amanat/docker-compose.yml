@@ -1,0 +1,67 @@
+# ============================================
+# DOCKER COMPOSE — СИСТЕМА "АМАНАТ"
+# ============================================
+# Запуск: docker compose up -d
+# После запуска: docker compose exec app npx prisma migrate deploy
+
+version: '3.8'
+
+services:
+  # ========================================
+  # ПРИЛОЖЕНИЕ NEXT.JS
+  # ========================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-amanat_secure_password}@db:5432/amanat?schema=public
+      - AUTH_SECRET=${AUTH_SECRET:-change_me_in_production_openssl_rand_base64_32}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      - NEXT_PUBLIC_APP_NAME=Аманат
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - amanat-network
+
+  # ========================================
+  # БАЗА ДАННЫХ POSTGRESQL
+  # ========================================
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-amanat_secure_password}
+      - POSTGRES_DB=amanat
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - amanat-network
+    # Раскомментируйте для внешнего доступа к БД:
+    # ports:
+    #   - "5432:5432"
+
+# ========================================
+# VOLUMES
+# ========================================
+volumes:
+  postgres_data:
+    driver: local
+
+# ========================================
+# NETWORKS
+# ========================================
+networks:
+  amanat-network:
+    driver: bridge

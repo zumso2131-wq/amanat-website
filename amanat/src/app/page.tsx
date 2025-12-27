@@ -14,8 +14,7 @@ import {
   Clock, 
   Calculator, 
   FileText,
-  ArrowRight,
-  CheckCircle
+  ArrowRight
 } from "lucide-react"
 
 const categories = [

@@ -7,7 +7,6 @@ import { auth } from "@/lib/auth"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Home, FileText, User, LogOut } from "lucide-react"
-import { signOut } from "next-auth/react"
 
 export default async function CabinetLayout({
   children,

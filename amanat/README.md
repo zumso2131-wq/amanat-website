@@ -1,10 +1,16 @@
-# Аманат — Система рассрочки товаров
+# 🏦 Аманат — Система рассрочки товаров
 
-Полнофункциональная система управления рассрочкой товаров с публичным сайтом, личным кабинетом клиента и CRM для администраторов.
+Production-ready система управления рассрочкой товаров с публичным сайтом, личным кабинетом клиента и CRM для администраторов.
 
-## 🚀 Быстрый старт
+## 📋 Требования
 
-### 1. Клонирование и установка зависимостей
+- **Node.js** 18+ (рекомендуется 20 LTS)
+- **PostgreSQL** 14+ (или Neon/Supabase)
+- **npm** или **yarn**
+
+## 🚀 Быстрый старт (локально)
+
+### 1. Клонирование и установка
 
 ```bash
 git clone <repo-url>
@@ -24,15 +30,14 @@ cp .env.example .env
 # База данных PostgreSQL
 DATABASE_URL="postgresql://postgres:password@localhost:5432/amanat?schema=public"
 
-# NextAuth
+# NextAuth (ОБЯЗАТЕЛЬНО сгенерировать для production!)
+AUTH_SECRET="openssl rand -base64 32"
 NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="сгенерируйте: openssl rand -base64 32"
-AUTH_SECRET="то же значение что и NEXTAUTH_SECRET"
 
 # Приложение
 APP_URL="http://localhost:3000"
 
-# Seed администратора
+# Администратор (для seed)
 SEED_ADMIN_PHONE="+77001234567"
 SEED_ADMIN_PASSWORD="admin123"
 SEED_ADMIN_NAME="Администратор"
@@ -50,20 +55,20 @@ docker run -d \
   postgres:16-alpine
 ```
 
-### 4. Миграции и seed данных
+### 4. Миграции и начальные данные
 
 ```bash
 # Генерация Prisma клиента
 npx prisma generate
 
-# Применение миграций (создание таблиц)
+# Миграция БД
 npx prisma migrate dev --name init
 
 # Заполнение начальными данными
 npx prisma db seed
 ```
 
-### 5. Запуск в режиме разработки
+### 5. Запуск
 
 ```bash
 npm run dev
@@ -73,204 +78,328 @@ npm run dev
 
 ---
 
-## 📋 Демо-аккаунты
+## 👤 Демо-аккаунты
 
-После выполнения seed:
-
-| Роль | Телефон | Пароль |
-|------|---------|--------|
-| Админ | +77001234567 | admin123 |
-| Менеджер | +77009876543 | manager123 |
-| Клиент | +77005551234 | client123 |
+| Роль | Телефон | Пароль | Доступ |
+|------|---------|--------|--------|
+| **Админ** | +77001234567 | admin123 | /admin/* |
+| **Менеджер** | +77009876543 | manager123 | /admin/* |
+| **Клиент** | +77005551234 | client123 | /cabinet/* |
 
 ---
 
-## 🏗 Технологии
-
-- **Next.js 14+** (App Router)
-- **TypeScript**
-- **Tailwind CSS** + shadcn/ui
-- **PostgreSQL** + Prisma ORM
-- **NextAuth.js v5** (Credentials: phone + password)
-- **Zod** — валидация
-- **bcryptjs** — хеширование паролей
-
----
-
-## 📁 Структура проекта
-
-```
-amanat/
-├── prisma/
-│   ├── schema.prisma    # Схема БД
-│   └── seed.ts          # Начальные данные
-├── src/
-│   ├── app/
-│   │   ├── (admin)/     # CRM (защищено ADMIN/MANAGER)
-│   │   ├── (cabinet)/   # Личный кабинет клиента
-│   │   ├── api/         # API Routes
-│   │   ├── login/       # Страница входа
-│   │   └── ...          # Публичные страницы
-│   ├── components/      # UI компоненты
-│   ├── lib/             # Утилиты
-│   │   ├── auth.ts      # NextAuth конфигурация
-│   │   ├── calculations.ts # Бизнес-логика расчётов
-│   │   ├── prisma.ts    # Prisma клиент
-│   │   └── validations.ts # Zod схемы
-│   └── middleware.ts    # Защита роутов
-└── ...
-```
-
----
-
-## 💰 Бизнес-логика расчётов Amanat
+## 💰 Бизнес-правила Amanat (зафиксированы)
 
 ### Наценки по срокам
 
-| Месяцев | Наценка | Редактируемая |
-|---------|---------|---------------|
-| 3 | ≥15% | ✅ (мин. 15%) |
-| 4 | 20% | ❌ |
-| 5 | 25% | ❌ |
-| 6 | 35% | ❌ |
-| 7 | 40% | ❌ |
-| 8 | 45% | ❌ |
-| 9 | 50% | ❌ |
-| 10 | 55% | ❌ |
-| 11 | 60% | ❌ |
-| 12 | 65% | ❌ |
+| Срок | Наценка | Редактируемая |
+|------|---------|---------------|
+| 3 мес | ≥15% | ✅ Да (мин. 15%) |
+| 4 мес | 20% | ❌ |
+| 5 мес | 25% | ❌ |
+| 6 мес | 35% | ❌ |
+| 7-12 мес | 35 + (N-6)×5% | ❌ |
 
-### Формулы
+### Формулы расчёта
 
 ```
 salePrice = round(purchasePrice × (1 + markup/100))
 amountToFinance = salePrice - downPayment
 basePayment = floor(amountToFinance / months)
-lastPayment = basePayment + remainder
+lastPayment = basePayment + (amountToFinance - basePayment × months)
 dueDate[i] = startDate + 30×i дней
 ```
 
----
+### Условия
 
-## 🔐 Роли и доступ
-
-| Маршрут | ADMIN | MANAGER | CLIENT | Гость |
-|---------|-------|---------|--------|-------|
-| `/` | ✅ | ✅ | ✅ | ✅ |
-| `/login` | → | → | → | ✅ |
-| `/cabinet/*` | ✅ | ✅ | ✅ | ❌ |
-| `/admin/*` | ✅ | ✅ | → /cabinet | ❌ |
+- **Первоначальный взнос**: 0 ≤ downPayment < salePrice
+- **Срок**: 3–12 месяцев
+- **Просрочка**: dueDate < today AND status ≠ PAID
 
 ---
 
-## 📊 API Endpoints
+## 🗂 Структура маршрутов
 
-### Публичные
-- `GET /api/products` — Каталог товаров
-- `POST /api/applications` — Заявка с сайта
+### Публичные страницы
 
-### Защищённые (ADMIN/MANAGER)
-- `GET/POST /api/clients` — Клиенты
-- `GET/PUT/DELETE /api/clients/[id]`
-- `GET/POST /api/deals` — Сделки
-- `GET/PUT/DELETE /api/deals/[id]`
-- `GET/POST /api/payments` — Платежи
-- `GET/POST /api/overdue` — Просрочки
-- `GET /api/reports` — Отчёты
-- `GET /api/export?type=clients|deals|payments` — CSV
+| Маршрут | Описание |
+|---------|----------|
+| `/` | Главная страница |
+| `/usloviya` | Условия рассрочки |
+| `/catalog` | Каталог товаров |
+| `/calculator` | Калькулятор рассрочки |
+| `/faq` | Вопросы и ответы |
+| `/contacts` | Контакты |
+| `/apply` | Заявка на рассрочку |
+| `/login` | Страница входа |
 
-### PDF
-- `GET /api/pdf?dealId=xxx&type=contract|schedule`
+### CRM Админка (/admin) — ADMIN, MANAGER
+
+| Маршрут | Описание |
+|---------|----------|
+| `/admin` | Дашборд (статистика) |
+| `/admin/clients` | Список клиентов |
+| `/admin/clients/new` | Создание клиента |
+| `/admin/clients/[id]` | Просмотр клиента |
+| `/admin/clients/[id]/edit` | Редактирование |
+| `/admin/deals` | Список сделок |
+| `/admin/deals/new` | Создание сделки |
+| `/admin/deals/[id]` | Детали сделки |
+| `/admin/payments` | Платежи |
+| `/admin/overdue` | Просрочки |
+| `/admin/reports` | Отчёты + CSV |
+
+### Личный кабинет (/cabinet) — CLIENT
+
+| Маршрут | Описание |
+|---------|----------|
+| `/cabinet` | Обзор (остаток, платежи) |
+| `/cabinet/deals` | Мои сделки |
+| `/cabinet/deals/[id]` | Детали + документы |
+
+### API
+
+| Endpoint | Методы | Доступ |
+|----------|--------|--------|
+| `/api/auth/*` | GET, POST | Публичный |
+| `/api/applications` | GET, POST | Публичный POST, GET для менеджеров |
+| `/api/products` | GET | Публичный |
+| `/api/clients` | GET, POST | ADMIN, MANAGER |
+| `/api/clients/[id]` | GET, PUT, DELETE | ADMIN, MANAGER |
+| `/api/deals` | GET, POST | ADMIN, MANAGER |
+| `/api/deals/[id]` | GET, PUT, DELETE | ADMIN, MANAGER |
+| `/api/payments` | GET, POST | ADMIN, MANAGER |
+| `/api/overdue` | GET, POST | ADMIN, MANAGER |
+| `/api/reports` | GET | ADMIN, MANAGER |
+| `/api/export` | GET | ADMIN, MANAGER |
+| `/api/pdf` | GET | ADMIN, MANAGER |
 
 ---
 
-## 🛠 Полезные команды
+## 📝 Как работать с системой
 
-```bash
-# Prisma
-npx prisma generate      # Генерация клиента
-npx prisma migrate dev   # Миграции (dev)
-npx prisma db push       # Push схемы (без миграции)
-npx prisma db seed       # Seed данных
-npx prisma studio        # GUI для БД
+### Создание клиента
 
-# Разработка
-npm run dev              # Dev сервер
-npm run build            # Сборка
-npm run start            # Production сервер
-npm run lint             # Линтер
-```
+1. Войдите как Админ или Менеджер
+2. Перейдите в `/admin/clients`
+3. Нажмите "Добавить клиента"
+4. Заполните ФИО, телефон (обязательно), ИИН, адрес
+
+### Создание сделки
+
+1. Перейдите в `/admin/deals/new`
+2. Выберите клиента из списка
+3. Введите название товара и цену закупа
+4. Выберите срок рассрочки (наценка рассчитается автоматически)
+5. Укажите первоначальный взнос (может быть 0)
+6. Нажмите "Создать сделку"
+7. График платежей сгенерируется автоматически
+
+### Приём платежа
+
+1. Перейдите на страницу сделки `/admin/deals/[id]`
+2. Или на странице просрочек `/admin/overdue`
+3. Укажите сумму и способ оплаты
+4. Статус installment обновится автоматически
+
+### Скачивание PDF
+
+На странице сделки:
+- "Договор PDF" — генерирует договор
+- "График PDF" — генерирует график платежей
+
+---
+
+## 🔐 Безопасность
+
+- ✅ Пароли хешируются bcrypt (cost 12)
+- ✅ JWT токены с подписью AUTH_SECRET
+- ✅ Secure cookies в production
+- ✅ CSRF защита (NextAuth)
+- ✅ Rate limiting на auth (5 попыток/мин)
+- ✅ Security headers (HSTS, X-Frame-Options, etc.)
+- ✅ Middleware проверяет роли
 
 ---
 
 ## 🚀 Деплой
 
-### Docker Compose (рекомендуется)
+### Вариант 1: VPS + Docker Compose
+
+**docker-compose.yml:**
 
 ```yaml
-# docker-compose.yml
 version: '3.8'
+
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        - DOCKER_BUILD=true
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/amanat
-      - NEXTAUTH_URL=https://your-domain.com
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD}@db:5432/amanat
       - AUTH_SECRET=${AUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
     depends_on:
       - db
+    restart: unless-stopped
 
   db:
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=amanat
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
 
 volumes:
   postgres_data:
 ```
 
-### Dockerfile
+**Dockerfile:**
 
 ```dockerfile
-FROM node:20-alpine AS builder
+FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
+
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ENV DOCKER_BUILD=true
 RUN npx prisma generate
 RUN npm run build
 
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
+USER nextjs
 EXPOSE 3000
 CMD ["node", "server.js"]
 ```
 
-### Vercel + Neon/Supabase
+**Запуск:**
 
-1. Подключите репозиторий к Vercel
-2. Создайте PostgreSQL на Neon или Supabase
-3. Добавьте переменные окружения в Vercel:
-   - `DATABASE_URL`
-   - `NEXTAUTH_SECRET`
-   - `AUTH_SECRET`
-   - `NEXTAUTH_URL`
-4. Deploy!
+```bash
+# Генерация секрета
+export AUTH_SECRET=$(openssl rand -base64 32)
+export DB_PASSWORD=$(openssl rand -base64 16)
+export NEXTAUTH_URL=https://your-domain.com
+
+# Запуск
+docker compose up -d
+
+# Миграции
+docker compose exec app npx prisma migrate deploy
+docker compose exec app npx prisma db seed
+```
+
+### Вариант 2: Vercel + Neon/Supabase
+
+1. **Создайте БД на Neon или Supabase**
+   - Скопируйте DATABASE_URL
+
+2. **Подключите репозиторий к Vercel**
+
+3. **Добавьте переменные окружения в Vercel:**
+   ```
+   DATABASE_URL=postgresql://...
+   AUTH_SECRET=<сгенерировать>
+   NEXTAUTH_URL=https://your-app.vercel.app
+   ```
+
+4. **Deploy!**
+
+5. **После деплоя выполните миграцию:**
+   ```bash
+   npx prisma migrate deploy
+   npx prisma db seed
+   ```
+
+### Nginx (опционально для VPS)
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+
+    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+---
+
+## 🛠 Команды
+
+```bash
+# Разработка
+npm run dev          # Dev сервер
+npm run build        # Production сборка
+npm run start        # Production сервер
+npm run lint         # Линтер
+
+# База данных
+npx prisma generate  # Генерация клиента
+npx prisma migrate dev   # Dev миграции
+npx prisma migrate deploy  # Prod миграции
+npx prisma db seed   # Заполнение данными
+npx prisma studio    # GUI для БД
+```
+
+---
+
+## 📊 Технологии
+
+- **Next.js 14+** (App Router)
+- **TypeScript**
+- **Tailwind CSS** + shadcn/ui
+- **PostgreSQL** + Prisma ORM 5.x
+- **NextAuth.js v5** (Credentials)
+- **Zod** — валидация
+- **bcryptjs** — хеширование
 
 ---
 
 ## 📝 Лицензия
 
 MIT
+
+---
+
+## 🆘 Поддержка
+
+При возникновении вопросов:
+- Создайте Issue в репозитории
+- Email: support@amanat.kz
