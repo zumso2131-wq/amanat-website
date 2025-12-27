@@ -1,31 +1,35 @@
+// ============================================
+// API КЛИЕНТА — GET / PUT / DELETE
+// ============================================
+
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireManager, requireAdmin } from "@/lib/auth"
 import { clientSchema } from "@/lib/validations"
-import { auth } from "@/lib/auth"
 import { logUpdate, logDelete } from "@/lib/audit"
 
-// GET - Get single client
+// ============================================
+// GET — Детали клиента
+// ============================================
+
 export async function GET(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user || !["ADMIN", "MANAGER"].includes(session.user.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
+    await requireManager()
     const { id } = await params
 
     const client = await prisma.client.findUnique({
       where: { id },
       include: {
         deals: {
-          include: {
-            installments: true,
-            payments: true,
-          },
           orderBy: { createdAt: "desc" },
+          include: {
+            _count: {
+              select: { payments: true, installments: true },
+            },
+          },
         },
       },
     })
@@ -37,133 +41,141 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({ success: true, data: client })
+    return NextResponse.json({
+      success: true,
+      data: client,
+    })
   } catch (error) {
-    console.error("Get client error:", error)
+    console.error("GET /api/clients/[id] error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при получении клиента" },
+      { success: false, error: "Ошибка загрузки клиента" },
       { status: 500 }
     )
   }
 }
 
-// PUT - Update client
+// ============================================
+// PUT — Обновление клиента
+// ============================================
+
 export async function PUT(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user || !["ADMIN", "MANAGER"].includes(session.user.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
+    const user = await requireManager()
     const { id } = await params
-    const body = await req.json()
-    const data = clientSchema.parse(body)
 
-    const existing = await prisma.client.findUnique({ where: { id } })
-    if (!existing) {
+    const body = await request.json()
+    const validatedData = clientSchema.parse(body)
+
+    // Проверка существования
+    const existingClient = await prisma.client.findUnique({
+      where: { id },
+    })
+
+    if (!existingClient) {
       return NextResponse.json(
         { success: false, error: "Клиент не найден" },
         { status: 404 }
       )
     }
 
-    // Check if phone is already taken by another client
-    if (data.phone !== existing.phone) {
-      const phoneExists = await prisma.client.findFirst({
-        where: { phone: data.phone, id: { not: id } },
+    // Проверка уникальности телефона (если меняется)
+    if (validatedData.phone !== existingClient.phone) {
+      const phoneExists = await prisma.client.findUnique({
+        where: { phone: validatedData.phone },
       })
       if (phoneExists) {
         return NextResponse.json(
-          { success: false, error: "Клиент с таким номером телефона уже существует" },
+          { success: false, error: "Клиент с таким телефоном уже существует" },
           { status: 400 }
         )
       }
     }
 
-    const client = await prisma.client.update({
+    const updatedClient = await prisma.client.update({
       where: { id },
       data: {
-        fullName: data.fullName,
-        phone: data.phone,
-        iin: data.iin || null,
-        passportNumber: data.passportNumber || null,
-        passportIssuedBy: data.passportIssuedBy || null,
-        passportIssuedAt: data.passportIssuedAt || null,
-        address: data.address || null,
-        note: data.note || null,
+        fullName: validatedData.fullName,
+        phone: validatedData.phone,
+        iin: validatedData.iin || null,
+        passportNumber: validatedData.passportNumber || null,
+        passportIssuedBy: validatedData.passportIssuedBy || null,
+        passportIssuedAt: validatedData.passportIssuedAt || null,
+        address: validatedData.address || null,
+        note: validatedData.note || null,
       },
     })
 
-    // Audit log
-    await logUpdate(
-      session.user.id,
-      "Client",
-      client.id,
-      existing as Record<string, unknown>,
-      client as Record<string, unknown>
-    )
+    // Аудит
+    await logUpdate(user.id, "Client", id, existingClient, updatedClient)
 
-    return NextResponse.json({ success: true, data: client })
+    return NextResponse.json({
+      success: true,
+      data: updatedClient,
+      message: "Клиент обновлён",
+    })
   } catch (error) {
-    console.error("Update client error:", error)
-    if (error instanceof Error && error.name === "ZodError") {
-      return NextResponse.json(
-        { success: false, error: "Проверьте правильность введённых данных" },
-        { status: 400 }
-      )
-    }
+    console.error("PUT /api/clients/[id] error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при обновлении клиента" },
+      { success: false, error: "Ошибка обновления клиента" },
       { status: 500 }
     )
   }
 }
 
-// DELETE - Delete client
+// ============================================
+// DELETE — Удаление клиента
+// ============================================
+
 export async function DELETE(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
+    const user = await requireAdmin()
     const { id } = await params
 
-    const existing = await prisma.client.findUnique({
+    const client = await prisma.client.findUnique({
       where: { id },
-      include: { _count: { select: { deals: true } } },
+      include: { deals: true },
     })
 
-    if (!existing) {
+    if (!client) {
       return NextResponse.json(
         { success: false, error: "Клиент не найден" },
         { status: 404 }
       )
     }
 
-    if (existing._count.deals > 0) {
+    // Нельзя удалять клиента с активными сделками
+    const activeDeals = client.deals.filter(
+      (d) => d.status === "ACTIVE" || d.status === "DRAFT"
+    )
+    if (activeDeals.length > 0) {
       return NextResponse.json(
-        { success: false, error: "Невозможно удалить клиента с активными сделками" },
+        { success: false, error: "Нельзя удалить клиента с активными сделками" },
         { status: 400 }
       )
     }
 
     await prisma.client.delete({ where: { id } })
 
-    // Audit log
-    await logDelete(session.user.id, "Client", id, existing as Record<string, unknown>)
+    // Аудит
+    await logDelete(user.id, "Client", id, {
+      fullName: client.fullName,
+      phone: client.phone,
+    })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      message: "Клиент удалён",
+    })
   } catch (error) {
-    console.error("Delete client error:", error)
+    console.error("DELETE /api/clients/[id] error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при удалении клиента" },
+      { success: false, error: "Ошибка удаления клиента" },
       { status: 500 }
     )
   }

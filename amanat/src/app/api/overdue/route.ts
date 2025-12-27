@@ -1,130 +1,123 @@
+// ============================================
+// API ПРОСРОЧЕК — GET (список) + POST (обновление статусов)
+// ============================================
+
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { overdueFilterSchema } from "@/lib/validations"
-import { auth } from "@/lib/auth"
+import { requireManager } from "@/lib/auth"
 import { getDaysOverdue } from "@/lib/calculations"
 
-// GET - List overdue installments
-export async function GET(req: NextRequest) {
-  try {
-    const session = await auth()
-    if (!session?.user || !["ADMIN", "MANAGER"].includes(session.user.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+// ============================================
+// GET — Список просроченных платежей
+// ============================================
 
-    const { searchParams } = new URL(req.url)
-    const params = overdueFilterSchema.parse({
-      page: searchParams.get("page"),
-      limit: searchParams.get("limit"),
-      managerId: searchParams.get("managerId"),
-      clientId: searchParams.get("clientId"),
-      minDaysOverdue: searchParams.get("minDaysOverdue"),
-      sortBy: searchParams.get("sortBy") || "dueDate",
-      sortOrder: searchParams.get("sortOrder") || "asc",
-    })
+export async function GET(request: NextRequest) {
+  try {
+    await requireManager()
+
+    const { searchParams } = new URL(request.url)
+    const clientId = searchParams.get("clientId")
+    const minDays = searchParams.get("minDays")
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
+    // Ищем installments где dueDate < today и status != PAID
     const where: Record<string, unknown> = {
-      status: { not: "PAID" },
       dueDate: { lt: today },
-      deal: {
-        status: "ACTIVE",
-      },
+      status: { not: "PAID" },
     }
 
-    if (params.managerId) {
-      where.deal = {
-        ...(where.deal as object),
-        createdByUserId: params.managerId,
-      }
+    // Фильтр по клиенту
+    if (clientId) {
+      where.deal = { clientId }
     }
 
-    if (params.clientId) {
-      where.deal = {
-        ...(where.deal as object),
-        clientId: params.clientId,
-      }
-    }
-
-    const [installments, total] = await Promise.all([
-      prisma.installment.findMany({
-        where,
-        orderBy: { [params.sortBy || "dueDate"]: params.sortOrder },
-        skip: (params.page - 1) * params.limit,
-        take: params.limit,
-        include: {
-          deal: {
-            include: {
-              client: {
-                select: { id: true, fullName: true, phone: true },
+    const overdueInstallments = await prisma.installment.findMany({
+      where,
+      include: {
+        deal: {
+          include: {
+            client: {
+              select: {
+                id: true,
+                fullName: true,
+                phone: true,
               },
-              createdByUser: {
-                select: { id: true, fullName: true },
+            },
+            createdByUser: {
+              select: {
+                id: true,
+                fullName: true,
               },
             },
           },
         },
-      }),
-      prisma.installment.count({ where }),
-    ])
+      },
+      orderBy: { dueDate: "asc" },
+    })
 
-    // Add days overdue to each installment
-    const overdueInstallments = installments.map((inst) => ({
-      ...inst,
+    // Маппинг и фильтрация по минимальным дням просрочки
+    let result = overdueInstallments.map((inst) => ({
+      id: inst.id,
+      dealId: inst.dealId,
+      dealNumber: inst.deal.dealNumber,
+      clientId: inst.deal.client.id,
+      clientName: inst.deal.client.fullName,
+      clientPhone: inst.deal.client.phone,
+      managerName: inst.deal.createdByUser.fullName,
+      index: inst.index,
+      dueDate: inst.dueDate,
+      amount: inst.amount,
+      status: inst.status,
       daysOverdue: getDaysOverdue(inst.dueDate),
     }))
 
-    // Filter by minDaysOverdue if specified
-    const filtered = params.minDaysOverdue
-      ? overdueInstallments.filter((i) => i.daysOverdue >= (params.minDaysOverdue || 0))
-      : overdueInstallments
+    // Фильтр по минимальным дням
+    if (minDays) {
+      const minDaysNum = parseInt(minDays)
+      result = result.filter((r) => r.daysOverdue >= minDaysNum)
+    }
 
-    // Calculate summary
+    // Статистика
     const summary = {
-      totalCount: total,
-      totalAmount: filtered.reduce((sum, i) => sum + i.amount, 0),
-      avgDaysOverdue: filtered.length > 0
-        ? Math.round(filtered.reduce((sum, i) => sum + i.daysOverdue, 0) / filtered.length)
+      totalCount: result.length,
+      totalAmount: result.reduce((sum, r) => sum + r.amount, 0),
+      avgDaysOverdue: result.length > 0 
+        ? Math.round(result.reduce((sum, r) => sum + r.daysOverdue, 0) / result.length)
         : 0,
     }
 
     return NextResponse.json({
       success: true,
-      data: filtered,
+      data: result,
       summary,
-      total: filtered.length,
-      page: params.page,
-      limit: params.limit,
-      totalPages: Math.ceil(filtered.length / params.limit),
     })
   } catch (error) {
-    console.error("Get overdue error:", error)
+    console.error("GET /api/overdue error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при получении просрочек" },
+      { success: false, error: "Ошибка загрузки просрочек" },
       { status: 500 }
     )
   }
 }
 
-// POST - Update overdue statuses (cron job or manual trigger)
-export async function POST(req: NextRequest) {
+// ============================================
+// POST — Обновить статусы просроченных
+// ============================================
+
+export async function POST() {
   try {
-    const session = await auth()
-    if (!session?.user || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    await requireManager()
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    // Update all due installments that are past their due date to OVERDUE
+    // Находим все DUE installments с просроченной датой
     const result = await prisma.installment.updateMany({
       where: {
         status: "DUE",
         dueDate: { lt: today },
-        deal: { status: "ACTIVE" },
       },
       data: {
         status: "OVERDUE",
@@ -133,13 +126,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Обновлено ${result.count} просроченных платежей`,
-      count: result.count,
+      message: `Обновлено статусов: ${result.count}`,
+      updated: result.count,
     })
   } catch (error) {
-    console.error("Update overdue error:", error)
+    console.error("POST /api/overdue error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при обновлении просрочек" },
+      { success: false, error: "Ошибка обновления статусов" },
       { status: 500 }
     )
   }

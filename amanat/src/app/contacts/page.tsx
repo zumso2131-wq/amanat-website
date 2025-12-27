@@ -1,170 +1,142 @@
-import { Header } from "@/components/layout/header"
-import { Footer } from "@/components/layout/footer"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+// ============================================
+// КОНТАКТЫ — /contacts
+// ============================================
+
 import Link from "next/link"
-import { Phone, Mail, MapPin, Clock, MessageSquare } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ArrowLeft, Phone, Mail, MapPin, Clock, MessageCircle } from "lucide-react"
 
 export default function ContactsPage() {
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      
-      <main className="flex-1">
-        {/* Hero */}
-        <section className="py-16 bg-gradient-to-br from-primary/5 via-background to-primary/10">
-          <div className="container mx-auto px-4">
-            <div className="max-w-3xl mx-auto text-center">
-              <h1 className="text-4xl font-bold mb-4">Контакты</h1>
-              <p className="text-xl text-muted-foreground">
-                Свяжитесь с нами любым удобным способом
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="border-b bg-white">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="h-10 w-10 rounded-lg bg-red-600 flex items-center justify-center">
+              <span className="text-white font-bold text-xl">А</span>
+            </div>
+            <span className="font-bold text-xl">Аманат</span>
+          </Link>
+          <Link href="/apply">
+            <Button className="bg-red-600 hover:bg-red-700">Оформить заявку</Button>
+          </Link>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-12 max-w-4xl">
+        <Link href="/" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          На главную
+        </Link>
+
+        <h1 className="text-4xl font-bold mb-8">Контакты</h1>
+
+        <div className="grid grid-cols-2 gap-6">
+          {/* Телефон */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Phone className="h-5 w-5 text-red-600" />
+                Телефон
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <a href="tel:+77001234567" className="text-2xl font-bold text-red-600 hover:underline">
+                +7 (700) 123-45-67
+              </a>
+              <p className="text-muted-foreground mt-2">
+                Звоните с 9:00 до 20:00 без выходных
               </p>
+            </CardContent>
+          </Card>
+
+          {/* WhatsApp */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageCircle className="h-5 w-5 text-green-600" />
+                WhatsApp
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <a href="https://wa.me/77001234567" target="_blank" rel="noopener noreferrer" className="text-2xl font-bold text-green-600 hover:underline">
+                +7 (700) 123-45-67
+              </a>
+              <p className="text-muted-foreground mt-2">
+                Пишите в любое время
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Email */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-red-600" />
+                Email
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <a href="mailto:info@amanat.kz" className="text-2xl font-bold text-red-600 hover:underline">
+                info@amanat.kz
+              </a>
+              <p className="text-muted-foreground mt-2">
+                Ответим в течение 24 часов
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Часы работы */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-red-600" />
+                Режим работы
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-lg font-medium">Ежедневно 9:00 — 20:00</p>
+              <p className="text-muted-foreground mt-2">
+                Без выходных и перерывов
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Адрес */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-red-600" />
+              Адрес офиса
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xl font-medium mb-2">
+              г. Алматы, ул. Абая, 1
+            </p>
+            <p className="text-muted-foreground mb-4">
+              Бизнес-центр "Аманат", 2 этаж, офис 201
+            </p>
+            {/* Карта-заглушка */}
+            <div className="h-64 bg-gray-200 rounded-lg flex items-center justify-center">
+              <span className="text-muted-foreground">Карта</span>
             </div>
-          </div>
-        </section>
-
-        {/* Contact Info */}
-        <section className="py-16">
-          <div className="container mx-auto px-4">
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto">
-              <Card>
-                <CardHeader>
-                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                    <Phone className="h-6 w-6 text-primary" />
-                  </div>
-                  <CardTitle className="text-lg">Телефон</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <a 
-                    href="tel:+77001234567" 
-                    className="text-lg font-medium hover:text-primary transition-colors"
-                  >
-                    +7 (700) 123-45-67
-                  </a>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Звонки с 9:00 до 19:00
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                    <MessageSquare className="h-6 w-6 text-primary" />
-                  </div>
-                  <CardTitle className="text-lg">WhatsApp</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <a 
-                    href="https://wa.me/77001234567" 
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-lg font-medium hover:text-primary transition-colors"
-                  >
-                    +7 (700) 123-45-67
-                  </a>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Отвечаем в течение часа
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                    <Mail className="h-6 w-6 text-primary" />
-                  </div>
-                  <CardTitle className="text-lg">Email</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <a 
-                    href="mailto:info@amanat.kz" 
-                    className="text-lg font-medium hover:text-primary transition-colors"
-                  >
-                    info@amanat.kz
-                  </a>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Ответ в течение 24 часов
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
-                    <Clock className="h-6 w-6 text-primary" />
-                  </div>
-                  <CardTitle className="text-lg">Режим работы</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="font-medium">Пн-Пт: 9:00 - 19:00</p>
-                  <p className="font-medium">Сб: 10:00 - 16:00</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Вс: выходной
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </section>
-
-        {/* Address */}
-        <section className="py-16 bg-muted/30">
-          <div className="container mx-auto px-4">
-            <div className="max-w-4xl mx-auto">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <MapPin className="h-6 w-6 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle>Наш офис</CardTitle>
-                      <p className="text-muted-foreground">Приходите в гости!</p>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid md:grid-cols-2 gap-8">
-                    <div>
-                      <h3 className="font-semibold mb-2">Адрес</h3>
-                      <p className="text-muted-foreground mb-4">
-                        г. Алматы, ул. Примерная, 123<br />
-                        БЦ «Центральный», офис 456
-                      </p>
-                      <h3 className="font-semibold mb-2">Как добраться</h3>
-                      <p className="text-muted-foreground">
-                        Станция метро «Абая», выход 2.<br />
-                        5 минут пешком в сторону горы.
-                      </p>
-                    </div>
-                    <div className="bg-muted rounded-lg h-64 flex items-center justify-center">
-                      <p className="text-muted-foreground">Карта загружается...</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
 
         {/* CTA */}
-        <section className="py-16">
-          <div className="container mx-auto px-4 text-center">
-            <h2 className="text-2xl font-bold mb-4">Готовы оформить рассрочку?</h2>
-            <p className="text-muted-foreground mb-8">
-              Оставьте заявку онлайн или приходите к нам в офис
-            </p>
-            <Button size="lg" asChild>
-              <Link href="/apply">
-                Оставить заявку
-              </Link>
+        <div className="mt-12 text-center">
+          <p className="text-lg mb-4">Готовы оформить рассрочку?</p>
+          <Link href="/apply">
+            <Button size="lg" className="bg-red-600 hover:bg-red-700">
+              Оформить заявку
             </Button>
-          </div>
-        </section>
+          </Link>
+        </div>
       </main>
-
-      <Footer />
     </div>
   )
 }

@@ -1,248 +1,202 @@
-import { redirect } from "next/navigation"
-import Link from "next/link"
+// ============================================
+// ЛИЧНЫЙ КАБИНЕТ — /cabinet
+// ============================================
+
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { formatMoney, formatDate, getDaysOverdue } from "@/lib/calculations"
+import { CreditCard, Calendar, AlertTriangle, TrendingUp } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { formatMoney, formatDate, isOverdue } from "@/lib/calculations"
-import { dealStatusLabels, dealStatusColors } from "@/lib/utils"
-import { 
-  HandshakeIcon, Calendar, AlertTriangle, CreditCard, ArrowRight
-} from "lucide-react"
 
 export default async function CabinetPage() {
   const session = await auth()
-  if (!session?.user) redirect("/login")
+  if (!session?.user) return null
 
-  // For demo, we'll show a client view
-  // In production, link user to client via phone
-  const client = await prisma.client.findFirst({
+  // Находим клиента по телефону пользователя
+  const client = await prisma.client.findUnique({
     where: { phone: session.user.phone },
     include: {
       deals: {
-        where: { status: { in: ["ACTIVE", "CLOSED"] } },
+        where: { status: "ACTIVE" },
         include: {
-          installments: {
-            orderBy: { index: "asc" },
-          },
+          installments: { orderBy: { index: "asc" } },
           payments: true,
         },
-        orderBy: { createdAt: "desc" },
-        take: 5,
       },
     },
   })
 
-  const activeDeals = client?.deals.filter(d => d.status === "ACTIVE") || []
-  const totalRemaining = activeDeals.reduce((sum, d) => {
-    const paid = d.payments.reduce((s, p) => s + p.amount, 0)
-    return sum + (d.amountToFinance - paid)
-  }, 0)
+  // Расчёты
+  let totalRemaining = 0
+  let overdueCount = 0
+  let nextPayment: { amount: number; dueDate: Date } | null = null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
 
-  const nextPayments = activeDeals.flatMap(d => {
-    const unpaid = d.installments.find(i => i.status !== "PAID")
-    if (unpaid) {
-      return [{
-        dealNumber: d.dealNumber,
-        productName: d.productName,
-        dueDate: unpaid.dueDate,
-        amount: unpaid.amount,
-        isOverdue: isOverdue(unpaid.dueDate, unpaid.status),
-      }]
+  if (client) {
+    for (const deal of client.deals) {
+      const paid = deal.payments.reduce((s, p) => s + p.amount, 0)
+      totalRemaining += deal.amountToFinance - paid
+
+      for (const inst of deal.installments) {
+        if (inst.status !== "PAID") {
+          // Просрочка
+          if (new Date(inst.dueDate) < today) {
+            overdueCount++
+          }
+          // Следующий платёж
+          if (!nextPayment && new Date(inst.dueDate) >= today) {
+            nextPayment = { amount: inst.amount, dueDate: inst.dueDate }
+          }
+        }
+      }
     }
-    return []
-  }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-
-  const overdueCount = nextPayments.filter(p => p.isOverdue).length
+  }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Добро пожаловать, {session.user.fullName}!</h1>
-        <p className="text-muted-foreground">Ваш личный кабинет в системе Аманат</p>
+        <h1 className="text-2xl font-bold">Добро пожаловать, {session.user.fullName}!</h1>
+        <p className="text-muted-foreground">Ваш личный кабинет</p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Статистика */}
+      <div className="grid grid-cols-4 gap-4">
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                <HandshakeIcon className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Активных сделок</p>
-                <p className="text-2xl font-bold">{activeDeals.length}</p>
-              </div>
-            </div>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <CreditCard className="h-4 w-4" />
+              Активных сделок
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{client?.deals.length || 0}</div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-lg bg-orange-100 flex items-center justify-center">
-                <CreditCard className="h-6 w-6 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">К оплате всего</p>
-                <p className="text-2xl font-bold">{formatMoney(totalRemaining)}</p>
-              </div>
-            </div>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Остаток к оплате
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{formatMoney(totalRemaining)}</div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-lg bg-blue-100 flex items-center justify-center">
-                <Calendar className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Ближайший платёж</p>
-                <p className="text-2xl font-bold">
-                  {nextPayments[0] ? formatDate(nextPayments[0].dueDate) : "—"}
-                </p>
-              </div>
-            </div>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Следующий платёж
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {nextPayment ? (
+              <>
+                <div className="text-2xl font-bold">{formatMoney(nextPayment.amount)}</div>
+                <p className="text-sm text-muted-foreground">{formatDate(nextPayment.dueDate)}</p>
+              </>
+            ) : (
+              <div className="text-lg text-muted-foreground">Нет платежей</div>
+            )}
           </CardContent>
         </Card>
 
         <Card className={overdueCount > 0 ? "border-red-200 bg-red-50" : ""}>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className={`h-12 w-12 rounded-lg flex items-center justify-center ${
-                overdueCount > 0 ? "bg-red-100" : "bg-green-100"
-              }`}>
-                <AlertTriangle className={`h-6 w-6 ${
-                  overdueCount > 0 ? "text-red-600" : "text-green-600"
-                }`} />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Просрочки</p>
-                <p className={`text-2xl font-bold ${overdueCount > 0 ? "text-red-600" : "text-green-600"}`}>
-                  {overdueCount}
-                </p>
-              </div>
+          <CardHeader className="pb-2">
+            <CardTitle className={`text-sm font-medium flex items-center gap-2 ${overdueCount > 0 ? "text-red-600" : "text-muted-foreground"}`}>
+              <AlertTriangle className="h-4 w-4" />
+              Просрочено
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-3xl font-bold ${overdueCount > 0 ? "text-red-600" : ""}`}>
+              {overdueCount}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Upcoming Payments */}
+      {/* Активные сделки */}
+      {client && client.deals.length > 0 && (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Ближайшие платежи</CardTitle>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/cabinet/schedule">
-                Весь график <ArrowRight className="h-4 w-4 ml-1" />
-              </Link>
-            </Button>
+          <CardHeader>
+            <CardTitle>Ваши сделки</CardTitle>
           </CardHeader>
           <CardContent>
-            {nextPayments.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                Нет запланированных платежей
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {nextPayments.slice(0, 5).map((payment, idx) => (
-                  <div 
-                    key={idx}
-                    className={`flex items-center justify-between p-3 rounded-lg ${
-                      payment.isOverdue ? "bg-red-50 border border-red-200" : "bg-muted/50"
-                    }`}
-                  >
-                    <div>
-                      <p className="font-medium">{payment.productName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Сделка {payment.dealNumber}
-                      </p>
+            <div className="space-y-4">
+              {client.deals.map((deal) => {
+                const paid = deal.payments.reduce((s, p) => s + p.amount, 0)
+                const remaining = deal.amountToFinance - paid
+                const progress = Math.round((paid / deal.amountToFinance) * 100)
+                const overdueInsts = deal.installments.filter(
+                  (i) => i.status !== "PAID" && new Date(i.dueDate) < today
+                )
+
+                return (
+                  <div key={deal.id} className="border rounded-lg p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="font-medium">{deal.productName}</h3>
+                        <p className="text-sm text-muted-foreground">№ {deal.dealNumber}</p>
+                      </div>
+                      <Link href={`/cabinet/deals/${deal.id}`}>
+                        <Button size="sm" variant="outline">Подробнее</Button>
+                      </Link>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold">{formatMoney(payment.amount)}</p>
-                      <p className={`text-sm ${payment.isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
-                        {payment.isOverdue ? "Просрочен!" : formatDate(payment.dueDate)}
-                      </p>
+
+                    <div className="grid grid-cols-3 gap-4 mb-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Оплачено:</span>
+                        <span className="ml-2 font-medium text-green-600">{formatMoney(paid)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Остаток:</span>
+                        <span className="ml-2 font-medium">{formatMoney(remaining)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Прогресс:</span>
+                        <span className="ml-2 font-medium">{progress}%</span>
+                      </div>
                     </div>
+
+                    {/* Прогресс-бар */}
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-green-500 h-2 rounded-full transition-all"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+
+                    {overdueInsts.length > 0 && (
+                      <div className="mt-3 text-sm text-red-600 flex items-center gap-1">
+                        <AlertTriangle className="h-4 w-4" />
+                        Просрочено платежей: {overdueInsts.length}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Recent Deals */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Мои сделки</CardTitle>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href="/cabinet/deals">
-                Все сделки <ArrowRight className="h-4 w-4 ml-1" />
-              </Link>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {!client?.deals.length ? (
-              <p className="text-center text-muted-foreground py-8">
-                У вас пока нет сделок
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {client.deals.slice(0, 5).map((deal) => {
-                  const paid = deal.payments.reduce((s, p) => s + p.amount, 0)
-                  const progress = Math.round((paid / deal.amountToFinance) * 100)
-                  return (
-                    <Link 
-                      key={deal.id}
-                      href={`/cabinet/deals/${deal.id}`}
-                      className="block p-3 rounded-lg hover:bg-muted transition-colors"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <p className="font-medium">{deal.productName}</p>
-                          <p className="text-xs text-muted-foreground">{deal.dealNumber}</p>
-                        </div>
-                        <Badge className={dealStatusColors[deal.status]}>
-                          {dealStatusLabels[deal.status]}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-primary transition-all"
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground">{progress}%</span>
-                      </div>
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Help Banner */}
-      <Card className="bg-primary/5 border-primary/20">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold">Нужна помощь?</h3>
-              <p className="text-sm text-muted-foreground">
-                Свяжитесь с нами по любым вопросам
-              </p>
+                )
+              })}
             </div>
-            <Button asChild>
-              <Link href="/cabinet/support">Написать в поддержку</Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
+
+      {(!client || client.deals.length === 0) && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground mb-4">У вас пока нет активных сделок</p>
+            <Link href="/apply">
+              <Button>Оформить рассрочку</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

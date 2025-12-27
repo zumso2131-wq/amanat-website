@@ -1,104 +1,115 @@
+// ============================================
+// API ОТЧЁТОВ — GET
+// ============================================
+
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
+import { requireManager } from "@/lib/auth"
 
-// GET - Get reports summary
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const session = await auth()
-    if (!session?.user || !["ADMIN", "MANAGER"].includes(session.user.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    await requireManager()
 
-    const { searchParams } = new URL(req.url)
-    const dateFrom = searchParams.get("dateFrom")
-    const dateTo = searchParams.get("dateTo")
+    // Все сделки
+    const deals = await prisma.deal.findMany({
+      include: {
+        payments: true,
+        installments: true,
+      },
+    })
 
-    const dateFilter: Record<string, unknown> = {}
-    if (dateFrom) dateFilter.gte = new Date(dateFrom)
-    if (dateTo) dateFilter.lte = new Date(dateTo)
-
-    const dealDateFilter = Object.keys(dateFilter).length > 0
-      ? { createdAt: dateFilter }
-      : {}
+    // Расчёты
+    let totalDeals = deals.length
+    let activeDeals = 0
+    let closedDeals = 0
+    let totalProfit = 0    // прибыль = sum(salePrice - purchasePrice)
+    let totalRevenue = 0   // выручка = sum(payments)
+    let totalReceivables = 0  // дебиторка = sum(remaining)
+    let overdueAmount = 0
+    let overdueCount = 0
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
-    // Get deals stats
-    const [
-      totalDeals,
-      activeDeals,
-      closedDeals,
-      draftDeals,
-      canceledDeals,
-      deals,
-      payments,
-      overdueInstallments,
-    ] = await Promise.all([
-      prisma.deal.count({ where: dealDateFilter }),
-      prisma.deal.count({ where: { ...dealDateFilter, status: "ACTIVE" } }),
-      prisma.deal.count({ where: { ...dealDateFilter, status: "CLOSED" } }),
-      prisma.deal.count({ where: { ...dealDateFilter, status: "DRAFT" } }),
-      prisma.deal.count({ where: { ...dealDateFilter, status: "CANCELED" } }),
-      prisma.deal.findMany({
-        where: { ...dealDateFilter, status: { in: ["ACTIVE", "CLOSED"] } },
-        select: {
-          purchasePrice: true,
-          salePrice: true,
-          amountToFinance: true,
-        },
-      }),
-      prisma.payment.aggregate({
-        where: {
-          paidAt: Object.keys(dateFilter).length > 0 ? dateFilter as { gte?: Date; lte?: Date } : undefined,
-        },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      prisma.installment.findMany({
-        where: {
-          status: { not: "PAID" },
-          dueDate: { lt: today },
-          deal: { status: "ACTIVE" },
-        },
-        select: { amount: true },
-      }),
-    ])
+    for (const deal of deals) {
+      // Статус
+      if (deal.status === "ACTIVE") activeDeals++
+      if (deal.status === "CLOSED") closedDeals++
 
-    // Calculate totals
-    const totalProfit = deals.reduce((sum, d) => sum + (d.salePrice - d.purchasePrice), 0)
-    const totalRevenue = payments._sum.amount || 0
-    const totalReceivables = deals.reduce((sum, d) => sum + d.amountToFinance, 0) - totalRevenue
-    const overdueAmount = overdueInstallments.reduce((sum, i) => sum + i.amount, 0)
+      // Прибыль (только активные и закрытые)
+      if (deal.status === "ACTIVE" || deal.status === "CLOSED") {
+        totalProfit += deal.salePrice - deal.purchasePrice
+      }
 
-    // Get monthly stats for charts
-    const monthlyStats = await getMonthlyStats()
+      // Выручка
+      const paid = deal.payments.reduce((s, p) => s + p.amount, 0)
+      totalRevenue += paid
 
-    // Get top managers
-    const topManagers = await prisma.deal.groupBy({
-      by: ["createdByUserId"],
-      where: { status: { in: ["ACTIVE", "CLOSED"] } },
-      _count: true,
-      _sum: { salePrice: true },
-      orderBy: { _count: { createdByUserId: "desc" } },
-      take: 5,
-    })
+      // Дебиторка
+      if (deal.status === "ACTIVE") {
+        totalReceivables += deal.amountToFinance - paid
+      }
 
-    const managersWithNames = await Promise.all(
-      topManagers.map(async (m) => {
-        const user = await prisma.user.findUnique({
-          where: { id: m.createdByUserId },
-          select: { fullName: true },
-        })
-        return {
-          userId: m.createdByUserId,
-          name: user?.fullName || "Неизвестно",
-          dealsCount: m._count,
-          totalSales: m._sum.salePrice || 0,
+      // Просрочки
+      for (const inst of deal.installments) {
+        if (inst.status !== "PAID" && new Date(inst.dueDate) < today) {
+          overdueAmount += inst.amount
+          overdueCount++
         }
+      }
+    }
+
+    // Тренды по месяцам (последние 6 месяцев)
+    const monthlyData: Array<{ month: string; deals: number; revenue: number }> = []
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date()
+      date.setMonth(date.getMonth() - i)
+      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1)
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0)
+
+      const monthDeals = deals.filter((d) => {
+        const created = new Date(d.createdAt)
+        return created >= monthStart && created <= monthEnd
+      }).length
+
+      const monthRevenue = deals.reduce((sum, deal) => {
+        return sum + deal.payments
+          .filter((p) => {
+            const paidAt = new Date(p.paidAt)
+            return paidAt >= monthStart && paidAt <= monthEnd
+          })
+          .reduce((s, p) => s + p.amount, 0)
+      }, 0)
+
+      monthlyData.push({
+        month: monthStart.toLocaleDateString("ru-RU", { month: "short", year: "2-digit" }),
+        deals: monthDeals,
+        revenue: monthRevenue,
       })
-    )
+    }
+
+    // Топ менеджеров
+    const managerStats = new Map<string, { name: string; deals: number; revenue: number }>()
+    
+    for (const deal of deals) {
+      if (deal.status === "CANCELED") continue
+      
+      const manager = await prisma.user.findUnique({
+        where: { id: deal.createdByUserId },
+        select: { id: true, fullName: true },
+      })
+      
+      if (manager) {
+        const existing = managerStats.get(manager.id) || { name: manager.fullName, deals: 0, revenue: 0 }
+        existing.deals++
+        existing.revenue += deal.payments.reduce((s, p) => s + p.amount, 0)
+        managerStats.set(manager.id, existing)
+      }
+    }
+
+    const topManagers = Array.from(managerStats.values())
+      .sort((a, b) => b.deals - a.deals)
+      .slice(0, 5)
 
     return NextResponse.json({
       success: true,
@@ -107,57 +118,21 @@ export async function GET(req: NextRequest) {
           totalDeals,
           activeDeals,
           closedDeals,
-          draftDeals,
-          canceledDeals,
-          totalRevenue,
           totalProfit,
+          totalRevenue,
           totalReceivables,
           overdueAmount,
-          overdueCount: overdueInstallments.length,
-          paymentsCount: payments._count,
+          overdueCount,
         },
-        monthly: monthlyStats,
-        topManagers: managersWithNames,
+        monthlyData,
+        topManagers,
       },
     })
   } catch (error) {
-    console.error("Get reports error:", error)
+    console.error("GET /api/reports error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при получении отчётов" },
+      { success: false, error: "Ошибка загрузки отчётов" },
       { status: 500 }
     )
   }
-}
-
-async function getMonthlyStats() {
-  const months = []
-  const now = new Date()
-
-  for (let i = 5; i >= 0; i--) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 1)
-
-    const [deals, payments] = await Promise.all([
-      prisma.deal.count({
-        where: {
-          createdAt: { gte: date, lt: nextMonth },
-          status: { in: ["ACTIVE", "CLOSED"] },
-        },
-      }),
-      prisma.payment.aggregate({
-        where: {
-          paidAt: { gte: date, lt: nextMonth },
-        },
-        _sum: { amount: true },
-      }),
-    ])
-
-    months.push({
-      month: date.toLocaleDateString("ru-RU", { month: "short", year: "numeric" }),
-      deals,
-      revenue: payments._sum.amount || 0,
-    })
-  }
-
-  return months
 }

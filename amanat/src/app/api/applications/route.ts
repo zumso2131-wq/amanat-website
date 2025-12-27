@@ -1,76 +1,75 @@
+// ============================================
+// API ЗАЯВОК — GET (список) + POST (создание)
+// ============================================
+
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireManager } from "@/lib/auth"
 import { applicationSchema } from "@/lib/validations"
-import { auth } from "@/lib/auth"
 
-// POST - Create application (public)
-export async function POST(req: NextRequest) {
+// ============================================
+// GET — Список заявок (только для менеджеров)
+// ============================================
+
+export async function GET(request: NextRequest) {
   try {
-    const body = await req.json()
-    const data = applicationSchema.parse(body)
+    await requireManager()
 
-    const application = await prisma.application.create({
-      data: {
-        fullName: data.fullName,
-        phone: data.phone,
-        product: data.product || null,
-        message: data.message || null,
-      },
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get("status")
+
+    const where: Record<string, unknown> = {}
+    if (status) where.status = status
+
+    const applications = await prisma.application.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 100,
     })
 
-    return NextResponse.json({ success: true, data: application })
+    return NextResponse.json({
+      success: true,
+      data: applications,
+    })
   } catch (error) {
-    console.error("Application error:", error)
-    if (error instanceof Error && error.name === "ZodError") {
-      return NextResponse.json(
-        { success: false, error: "Проверьте правильность введённых данных" },
-        { status: 400 }
-      )
-    }
+    console.error("GET /api/applications error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при создании заявки" },
+      { success: false, error: "Ошибка загрузки заявок" },
       { status: 500 }
     )
   }
 }
 
-// GET - List applications (admin only)
-export async function GET(req: NextRequest) {
+// ============================================
+// POST — Создание заявки (публичный)
+// ============================================
+
+export async function POST(request: NextRequest) {
   try {
-    const session = await auth()
-    if (!session?.user || !["ADMIN", "MANAGER"].includes(session.user.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const body = await request.json()
+    const validatedData = applicationSchema.parse(body)
 
-    const { searchParams } = new URL(req.url)
-    const page = parseInt(searchParams.get("page") || "1")
-    const limit = parseInt(searchParams.get("limit") || "20")
-    const status = searchParams.get("status")
+    const application = await prisma.application.create({
+      data: {
+        fullName: validatedData.fullName,
+        phone: validatedData.phone,
+        product: validatedData.product || null,
+        message: validatedData.message || null,
+        status: "NEW",
+      },
+    })
 
-    const where = status ? { status } : {}
-
-    const [applications, total] = await Promise.all([
-      prisma.application.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.application.count({ where }),
-    ])
+    console.log("New application:", application.id, validatedData.fullName, validatedData.phone)
 
     return NextResponse.json({
       success: true,
-      data: applications,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+      data: application,
+      message: "Заявка успешно создана",
     })
   } catch (error) {
-    console.error("Get applications error:", error)
+    console.error("POST /api/applications error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при получении заявок" },
+      { success: false, error: "Ошибка создания заявки" },
       { status: 500 }
     )
   }

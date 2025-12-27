@@ -1,270 +1,280 @@
 "use client"
 
+// ============================================
+// КАЛЬКУЛЯТОР — /calculator
+// ============================================
+
 import { useState, useEffect } from "react"
-import { Header } from "@/components/layout/header"
-import { Footer } from "@/components/layout/footer"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Separator } from "@/components/ui/separator"
-import Link from "next/link"
-import { ArrowRight, Calculator, Info } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { ArrowLeft, Calculator, ArrowRight } from "lucide-react"
 import { 
   calculateDeal, 
   formatMoney, 
   formatDate,
-  getMarkupInfo,
+  getMarkupPercent, 
+  isMarkupEditable,
   MIN_MONTHS,
   MAX_MONTHS,
-  MIN_MARKUP_3_MONTHS
+  MIN_MARKUP_3_MONTHS 
 } from "@/lib/calculations"
-import type { DealCalculation } from "@/types"
 
 export default function CalculatorPage() {
-  const [purchasePrice, setPurchasePrice] = useState<number>(100000)
-  const [months, setMonths] = useState<number>(6)
-  const [downPayment, setDownPayment] = useState<number>(0)
-  const [customMarkup, setCustomMarkup] = useState<number>(MIN_MARKUP_3_MONTHS)
-  const [calculation, setCalculation] = useState<DealCalculation | null>(null)
+  const [purchasePrice, setPurchasePrice] = useState(500000)
+  const [months, setMonths] = useState(6)
+  const [downPayment, setDownPayment] = useState(0)
+  const [customMarkup, setCustomMarkup] = useState(15)
+  const [calculation, setCalculation] = useState<ReturnType<typeof calculateDeal> | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const markupInfo = getMarkupInfo(months)
-
+  // Пересчёт
   useEffect(() => {
     try {
       setError(null)
-      const result = calculateDeal({
+      if (purchasePrice <= 0) {
+        setCalculation(null)
+        return
+      }
+
+      const calc = calculateDeal({
         purchasePrice,
         months,
         downPayment,
         startDate: new Date(),
         customMarkup: months === 3 ? customMarkup : undefined,
       })
-      setCalculation(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка расчёта")
+      setCalculation(calc)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ошибка расчёта")
       setCalculation(null)
     }
   }, [purchasePrice, months, downPayment, customMarkup])
 
+  const markupEditable = isMarkupEditable(months)
+  const currentMarkup = markupEditable ? customMarkup : getMarkupPercent(months)
+
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      
-      <main className="flex-1 py-12 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="max-w-5xl mx-auto">
-            <div className="text-center mb-12">
-              <h1 className="text-4xl font-bold mb-4">Калькулятор рассрочки</h1>
-              <p className="text-xl text-muted-foreground">
-                Рассчитайте ежемесячный платёж и полную стоимость товара в рассрочку
-              </p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="border-b bg-white">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="h-10 w-10 rounded-lg bg-red-600 flex items-center justify-center">
+              <span className="text-white font-bold text-xl">А</span>
             </div>
+            <span className="font-bold text-xl">Аманат</span>
+          </Link>
+          <Link href="/apply">
+            <Button className="bg-red-600 hover:bg-red-700">Оформить заявку</Button>
+          </Link>
+        </div>
+      </header>
 
-            <div className="grid lg:grid-cols-2 gap-8">
-              {/* Input Form */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calculator className="h-5 w-5" />
-                    Параметры рассрочки
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="price">Стоимость товара (₸)</Label>
-                    <Input
-                      id="price"
-                      type="number"
-                      min={1000}
-                      step={1000}
-                      value={purchasePrice}
-                      onChange={(e) => setPurchasePrice(Number(e.target.value))}
-                    />
-                  </div>
+      <main className="container mx-auto px-4 py-12">
+        <Link href="/" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          На главную
+        </Link>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="months">Срок рассрочки</Label>
-                    <Select 
-                      value={months.toString()} 
-                      onValueChange={(v) => setMonths(Number(v))}
+        <div className="flex items-center gap-3 mb-8">
+          <Calculator className="h-8 w-8 text-red-600" />
+          <h1 className="text-4xl font-bold">Калькулятор рассрочки</h1>
+        </div>
+
+        <div className="grid grid-cols-2 gap-8">
+          {/* Форма */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Параметры рассрочки</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Цена товара */}
+              <div className="space-y-2">
+                <Label>Стоимость товара (₸)</Label>
+                <Input
+                  type="number"
+                  min="10000"
+                  step="10000"
+                  value={purchasePrice}
+                  onChange={(e) => setPurchasePrice(Number(e.target.value))}
+                />
+                <div className="flex gap-2">
+                  {[100000, 300000, 500000, 1000000].map((v) => (
+                    <Button 
+                      key={v} 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setPurchasePrice(v)}
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: MAX_MONTHS - MIN_MONTHS + 1 }, (_, i) => i + MIN_MONTHS).map((m) => (
-                          <SelectItem key={m} value={m.toString()}>
-                            {m} {m === 3 || m === 4 ? 'месяца' : 'месяцев'}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      {formatMoney(v)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="markup">
-                      {markupInfo.label}
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        id="markup"
-                        type="number"
-                        min={markupInfo.min}
-                        value={markupInfo.editable ? customMarkup : markupInfo.value}
-                        onChange={(e) => setCustomMarkup(Number(e.target.value))}
-                        disabled={!markupInfo.editable}
-                        className="flex-1"
-                      />
-                      <span className="text-muted-foreground">%</span>
-                    </div>
-                    {!markupInfo.editable && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Info className="h-3 w-3" />
-                        Фиксированная наценка для выбранного срока
-                      </p>
-                    )}
-                  </div>
+              {/* Срок */}
+              <div className="space-y-2">
+                <Label>Срок рассрочки</Label>
+                <Select value={String(months)} onValueChange={(v) => setMonths(Number(v))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: MAX_MONTHS - MIN_MONTHS + 1 }, (_, i) => MIN_MONTHS + i).map((m) => (
+                      <SelectItem key={m} value={String(m)}>
+                        {m} мес — наценка {getMarkupPercent(m)}%
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="downPayment">Первоначальный взнос (₸)</Label>
-                    <Input
-                      id="downPayment"
-                      type="number"
-                      min={0}
-                      step={1000}
-                      value={downPayment}
-                      onChange={(e) => setDownPayment(Number(e.target.value))}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Можно 0 — без первоначального взноса
-                    </p>
-                  </div>
+              {/* Наценка (для 3 мес) */}
+              {markupEditable && (
+                <div className="space-y-2">
+                  <Label>Наценка (мин. {MIN_MARKUP_3_MONTHS}%)</Label>
+                  <Input
+                    type="number"
+                    min={MIN_MARKUP_3_MONTHS}
+                    value={customMarkup}
+                    onChange={(e) => setCustomMarkup(Number(e.target.value))}
+                  />
+                </div>
+              )}
 
-                  {error && (
-                    <div className="p-3 bg-destructive/10 text-destructive rounded-md text-sm">
-                      {error}
-                    </div>
-                  )}
+              {/* Первый взнос */}
+              <div className="space-y-2">
+                <Label>Первоначальный взнос (₸)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="10000"
+                  value={downPayment}
+                  onChange={(e) => setDownPayment(Number(e.target.value))}
+                />
+                <div className="flex gap-2">
+                  {[0, 50000, 100000, 200000].map((v) => (
+                    <Button 
+                      key={v} 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setDownPayment(v)}
+                    >
+                      {v === 0 ? "Без взноса" : formatMoney(v)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Результат */}
+          <div className="space-y-6">
+            {error ? (
+              <Card className="border-red-200 bg-red-50">
+                <CardContent className="pt-6 text-red-600">
+                  {error}
                 </CardContent>
               </Card>
-
-              {/* Results */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Результат расчёта</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {calculation ? (
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 bg-muted rounded-lg">
-                          <p className="text-sm text-muted-foreground">Цена закупа</p>
-                          <p className="text-xl font-bold">{formatMoney(calculation.purchasePrice)}</p>
-                        </div>
-                        <div className="p-4 bg-muted rounded-lg">
-                          <p className="text-sm text-muted-foreground">Наценка</p>
-                          <p className="text-xl font-bold">{calculation.markupPercentFinal}%</p>
-                        </div>
-                        <div className="p-4 bg-primary/10 rounded-lg">
-                          <p className="text-sm text-muted-foreground">Цена продажи</p>
-                          <p className="text-xl font-bold text-primary">{formatMoney(calculation.salePrice)}</p>
-                        </div>
-                        <div className="p-4 bg-muted rounded-lg">
-                          <p className="text-sm text-muted-foreground">Первоначальный взнос</p>
-                          <p className="text-xl font-bold">{formatMoney(calculation.downPayment)}</p>
-                        </div>
+            ) : calculation ? (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Результат расчёта</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm text-muted-foreground">Цена товара</div>
+                        <div className="text-xl font-medium">{formatMoney(calculation.purchasePrice)}</div>
                       </div>
-
-                      <Separator />
-
-                      <div className="p-6 bg-primary text-primary-foreground rounded-lg text-center">
-                        <p className="text-sm opacity-80">Ежемесячный платёж</p>
-                        <p className="text-4xl font-bold">{formatMoney(calculation.monthlyBasePayment)}</p>
-                        <p className="text-sm opacity-80 mt-1">
-                          в течение {calculation.months} месяцев
-                        </p>
+                      <div>
+                        <div className="text-sm text-muted-foreground">Наценка</div>
+                        <div className="text-xl font-medium">{calculation.markupPercentFinal}%</div>
                       </div>
-
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Сумма к выплате:</span>
-                          <span className="font-medium">{formatMoney(calculation.amountToFinance)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Переплата:</span>
-                          <span className="font-medium">
-                            {formatMoney(calculation.salePrice - calculation.purchasePrice)}
-                          </span>
-                        </div>
-                        {calculation.lastPaymentAdjustment > 0 && (
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Последний платёж:</span>
-                            <span className="font-medium">
-                              {formatMoney(calculation.monthlyBasePayment + calculation.lastPaymentAdjustment)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      <Button className="w-full" size="lg" asChild>
-                        <Link href="/apply">
-                          Оформить рассрочку
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </Link>
-                      </Button>
                     </div>
-                  ) : (
-                    <div className="text-center text-muted-foreground py-12">
-                      Введите параметры для расчёта
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
 
-            {/* Payment Schedule */}
-            {calculation && (
-              <Card className="mt-8">
-                <CardHeader>
-                  <CardTitle>Примерный график платежей</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-20">№</TableHead>
-                        <TableHead>Дата платежа</TableHead>
-                        <TableHead className="text-right">Сумма</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                    <div className="border-t pt-4">
+                      <div className="text-sm text-muted-foreground">Цена с наценкой</div>
+                      <div className="text-3xl font-bold text-red-600">{formatMoney(calculation.salePrice)}</div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-sm text-muted-foreground">Первый взнос</div>
+                        <div className="text-xl font-medium">{formatMoney(calculation.downPayment)}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground">К выплате</div>
+                        <div className="text-xl font-bold">{formatMoney(calculation.amountToFinance)}</div>
+                      </div>
+                    </div>
+
+                    <div className="bg-red-50 rounded-lg p-4 text-center">
+                      <div className="text-sm text-muted-foreground mb-1">Ежемесячный платёж</div>
+                      <div className="text-4xl font-bold text-red-600">
+                        ~{formatMoney(calculation.monthlyBasePayment)}
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">
+                        {calculation.months} платежей
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* График */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Примерный график платежей</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-64 overflow-auto">
                       {calculation.installments.map((inst) => (
-                        <TableRow key={inst.index}>
-                          <TableCell className="font-medium">{inst.index}</TableCell>
-                          <TableCell>{formatDate(inst.dueDate)}</TableCell>
-                          <TableCell className="text-right font-medium">{formatMoney(inst.amount)}</TableCell>
-                        </TableRow>
+                        <div 
+                          key={inst.index}
+                          className="flex justify-between items-center py-2 border-b last:border-0"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-muted-foreground w-8">
+                              #{inst.index}
+                            </span>
+                            <span>{formatDate(inst.dueDate)}</span>
+                          </div>
+                          <span className="font-medium">{formatMoney(inst.amount)}</span>
+                        </div>
                       ))}
-                      <TableRow className="bg-muted/50">
-                        <TableCell colSpan={2} className="font-bold">Итого к выплате</TableCell>
-                        <TableCell className="text-right font-bold">
-                          {formatMoney(calculation.amountToFinance)}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* CTA */}
+                <Link href="/apply">
+                  <Button size="lg" className="w-full bg-red-600 hover:bg-red-700">
+                    Оформить заявку
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <Card>
+                <CardContent className="pt-6 text-center text-muted-foreground">
+                  Введите параметры для расчёта
                 </CardContent>
               </Card>
             )}
           </div>
         </div>
       </main>
-
-      <Footer />
     </div>
   )
 }

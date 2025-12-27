@@ -1,117 +1,118 @@
-import { Header } from "@/components/layout/header"
-import { Footer } from "@/components/layout/footer"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { MessageSquare } from "lucide-react"
+// ============================================
+// FAQ — /faq
+// ============================================
 
-const faqItems = [
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ArrowLeft, HelpCircle, ChevronDown } from "lucide-react"
+
+const faqs = [
   {
-    question: "Что такое рассрочка от Аманат?",
-    answer: "Аманат — это система рассрочки на товары без банковского кредита. Вы покупаете товар напрямую у нас с наценкой, которая зависит от срока рассрочки (от 15% до 65%), и платите частями каждый месяц. Никаких скрытых комиссий и процентов."
+    q: "Как оформить рассрочку?",
+    a: "Выберите товар в каталоге или магазине партнёра, оставьте заявку онлайн или по телефону. После одобрения внесите первый взнос (если требуется) и получите товар."
   },
   {
-    question: "Какие документы нужны для оформления?",
-    answer: "Для оформления рассрочки вам понадобится только удостоверение личности (паспорт) и ИИН. Также потребуется контактный номер телефона для связи."
+    q: "Какие документы нужны?",
+    a: "Для оформления рассрочки нужно только удостоверение личности гражданина РК. Дополнительные документы не требуются."
   },
   {
-    question: "На какой срок можно оформить рассрочку?",
-    answer: "Срок рассрочки от 3 до 12 месяцев. Чем больше срок, тем выше наценка: 3 месяца — от 15%, 5 месяцев — 25%, 6 месяцев — 35%, и так далее до 65% за 12 месяцев."
+    q: "Какая наценка?",
+    a: "Наценка зависит от срока рассрочки: от 15% за 3 месяца до 65% за 12 месяцев. Точные условия указаны в разделе «Условия»."
   },
   {
-    question: "Нужен ли первоначальный взнос?",
-    answer: "Первоначальный взнос не обязателен — можно оформить рассрочку с взносом от 0%. Однако чем больше первоначальный взнос, тем меньше будет ежемесячный платёж."
+    q: "Нужен ли первоначальный взнос?",
+    a: "Первоначальный взнос не обязателен. Вы можете оформить рассрочку без взноса или внести любую сумму для уменьшения ежемесячных платежей."
   },
   {
-    question: "Как рассчитывается ежемесячный платёж?",
-    answer: "Ежемесячный платёж = (Цена продажи - Первоначальный взнос) / Количество месяцев. Цена продажи = Цена закупа × (1 + Наценка%). Все расчёты можно сделать на нашем калькуляторе."
+    q: "Как производить платежи?",
+    a: "Платежи можно вносить наличными в офисе, картой, банковским переводом. Напоминания о платежах приходят за 3 дня до даты."
   },
   {
-    question: "Когда нужно вносить платежи?",
-    answer: "Платежи вносятся каждые 30 дней с даты получения товара. Например, если вы получили товар 1 января, первый платёж — до 31 января, второй — до 2 марта и т.д."
+    q: "Что будет при просрочке?",
+    a: "При просрочке более 30 дней мы свяжемся для обсуждения ситуации. Возможно досрочное истребование товара или реструктуризация долга."
   },
   {
-    question: "Какие способы оплаты доступны?",
-    answer: "Вы можете оплачивать рассрочку наличными в нашем офисе, переводом на карту или банковским переводом. После каждой оплаты выдаётся квитанция."
+    q: "Можно ли погасить досрочно?",
+    a: "Да, досрочное погашение возможно без штрафов и комиссий. Обратитесь в офис или личный кабинет."
   },
   {
-    question: "Что будет, если просрочить платёж?",
-    answer: "При просрочке платежа мы свяжемся с вами для уточнения ситуации. Рекомендуем вносить платежи вовремя, чтобы избежать начисления штрафов и сохранить хорошую репутацию для будущих покупок."
+    q: "Когда товар станет моим?",
+    a: "Право собственности на товар переходит к вам после полной оплаты всей суммы рассрочки."
   },
   {
-    question: "Можно ли погасить рассрочку досрочно?",
-    answer: "Да, вы можете погасить рассрочку досрочно без каких-либо штрафов. При досрочном погашении вы платите оставшуюся сумму по графику без пересчёта наценки."
+    q: "Есть ли личный кабинет?",
+    a: "Да, в личном кабинете вы можете отслеживать свои сделки, график платежей, скачивать документы и видеть историю платежей."
   },
   {
-    question: "Какие товары можно купить в рассрочку?",
-    answer: "В рассрочку можно приобрести любую технику и товары: смартфоны, ноутбуки, телевизоры, бытовую технику и многое другое. Вы также можете принести свой товар из другого магазина."
-  },
-  {
-    question: "Как быстро оформляется рассрочка?",
-    answer: "Оформление занимает около 15 минут. Вы приходите с документами, мы проверяем данные, подписываем договор — и вы получаете товар."
-  },
-  {
-    question: "Могу ли я отслеживать свои платежи онлайн?",
-    answer: "Да, после оформления рассрочки вы получаете доступ в личный кабинет, где можете видеть график платежей, историю оплат и скачивать документы."
+    q: "Как связаться с поддержкой?",
+    a: "Позвоните по номеру +7 (700) 123-45-67 или напишите на info@amanat.kz. Мы работаем с 9:00 до 20:00 без выходных."
   },
 ]
 
-export default function FAQPage() {
+export default function FaqPage() {
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      
-      <main className="flex-1">
-        {/* Hero */}
-        <section className="py-16 bg-gradient-to-br from-primary/5 via-background to-primary/10">
-          <div className="container mx-auto px-4">
-            <div className="max-w-3xl mx-auto text-center">
-              <h1 className="text-4xl font-bold mb-4">Частые вопросы</h1>
-              <p className="text-xl text-muted-foreground">
-                Ответы на самые популярные вопросы о рассрочке
-              </p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="border-b bg-white">
+        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="h-10 w-10 rounded-lg bg-red-600 flex items-center justify-center">
+              <span className="text-white font-bold text-xl">А</span>
             </div>
-          </div>
-        </section>
+            <span className="font-bold text-xl">Аманат</span>
+          </Link>
+          <Link href="/apply">
+            <Button className="bg-red-600 hover:bg-red-700">Оформить заявку</Button>
+          </Link>
+        </div>
+      </header>
 
-        {/* FAQ */}
-        <section className="py-16">
-          <div className="container mx-auto px-4">
-            <div className="max-w-3xl mx-auto">
-              <Accordion type="single" collapsible className="space-y-4">
-                {faqItems.map((item, idx) => (
-                  <AccordionItem key={idx} value={`item-${idx}`} className="border rounded-lg px-6">
-                    <AccordionTrigger className="text-left hover:no-underline">
-                      {item.question}
-                    </AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground">
-                      {item.answer}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
-            </div>
-          </div>
-        </section>
+      <main className="container mx-auto px-4 py-12 max-w-3xl">
+        <Link href="/" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          На главную
+        </Link>
 
-        {/* Contact CTA */}
-        <section className="py-16 bg-muted/30">
-          <div className="container mx-auto px-4 text-center">
-            <h2 className="text-2xl font-bold mb-4">Не нашли ответ на свой вопрос?</h2>
-            <p className="text-muted-foreground mb-8">
-              Свяжитесь с нами, и мы с радостью ответим на все ваши вопросы
+        <div className="flex items-center gap-3 mb-8">
+          <HelpCircle className="h-8 w-8 text-red-600" />
+          <h1 className="text-4xl font-bold">Вопросы и ответы</h1>
+        </div>
+
+        <div className="space-y-4">
+          {faqs.map((faq, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg flex items-start gap-3">
+                  <span className="text-red-600 font-bold">{i + 1}.</span>
+                  {faq.q}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <p className="text-muted-foreground">{faq.a}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* CTA */}
+        <Card className="mt-12 bg-red-50 border-red-100">
+          <CardContent className="pt-6 text-center">
+            <h3 className="font-bold text-lg mb-2">Не нашли ответ?</h3>
+            <p className="text-muted-foreground mb-4">
+              Свяжитесь с нами, и мы ответим на все ваши вопросы
             </p>
-            <Button asChild>
+            <div className="flex justify-center gap-4">
               <Link href="/contacts">
-                <MessageSquare className="mr-2 h-4 w-4" />
-                Связаться с нами
+                <Button variant="outline">Контакты</Button>
               </Link>
-            </Button>
-          </div>
-        </section>
+              <Link href="/apply">
+                <Button className="bg-red-600 hover:bg-red-700">Оформить заявку</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
       </main>
-
-      <Footer />
     </div>
   )
 }

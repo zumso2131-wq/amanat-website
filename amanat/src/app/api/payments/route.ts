@@ -1,22 +1,25 @@
+// ============================================
+// API ПЛАТЕЖЕЙ — GET (список) + POST (создание)
+// ============================================
+
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { requireManager } from "@/lib/auth"
 import { paymentSchema, paginationSchema } from "@/lib/validations"
-import { auth } from "@/lib/auth"
 import { logCreate } from "@/lib/audit"
 
-// GET - List payments
-export async function GET(req: NextRequest) {
-  try {
-    const session = await auth()
-    if (!session?.user || !["ADMIN", "MANAGER"].includes(session.user.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+// ============================================
+// GET — Список платежей
+// ============================================
 
-    const { searchParams } = new URL(req.url)
+export async function GET(request: NextRequest) {
+  try {
+    await requireManager()
+
+    const { searchParams } = new URL(request.url)
     const params = paginationSchema.parse({
-      page: searchParams.get("page"),
-      limit: searchParams.get("limit"),
-      search: searchParams.get("search"),
+      page: searchParams.get("page") || 1,
+      limit: searchParams.get("limit") || 50,
       sortBy: searchParams.get("sortBy") || "paidAt",
       sortOrder: searchParams.get("sortOrder") || "desc",
     })
@@ -27,37 +30,40 @@ export async function GET(req: NextRequest) {
     const where: Record<string, unknown> = {}
     if (dealId) where.dealId = dealId
     if (method) where.method = method
-    if (params.search) {
-      where.OR = [
-        { deal: { dealNumber: { contains: params.search, mode: "insensitive" } } },
-        { deal: { client: { fullName: { contains: params.search, mode: "insensitive" } } } },
-      ]
-    }
 
-    const [payments, total] = await Promise.all([
-      prisma.payment.findMany({
-        where,
-        orderBy: { [params.sortBy || "paidAt"]: params.sortOrder },
-        skip: (params.page - 1) * params.limit,
-        take: params.limit,
-        include: {
-          deal: {
-            select: {
-              id: true,
-              dealNumber: true,
-              productName: true,
-              client: {
-                select: { id: true, fullName: true, phone: true },
+    const total = await prisma.payment.count({ where })
+
+    const payments = await prisma.payment.findMany({
+      where,
+      include: {
+        deal: {
+          select: {
+            id: true,
+            dealNumber: true,
+            productName: true,
+            client: {
+              select: {
+                id: true,
+                fullName: true,
+                phone: true,
               },
             },
           },
-          installment: {
-            select: { id: true, index: true, dueDate: true, amount: true },
+        },
+        installment: {
+          select: {
+            id: true,
+            index: true,
+            amount: true,
           },
         },
-      }),
-      prisma.payment.count({ where }),
-    ])
+      },
+      orderBy: {
+        [params.sortBy || "paidAt"]: params.sortOrder,
+      },
+      skip: (params.page - 1) * params.limit,
+      take: params.limit,
+    })
 
     return NextResponse.json({
       success: true,
@@ -68,33 +74,31 @@ export async function GET(req: NextRequest) {
       totalPages: Math.ceil(total / params.limit),
     })
   } catch (error) {
-    console.error("Get payments error:", error)
+    console.error("GET /api/payments error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при получении платежей" },
+      { success: false, error: "Ошибка загрузки платежей" },
       { status: 500 }
     )
   }
 }
 
-// POST - Create payment
-export async function POST(req: NextRequest) {
+// ============================================
+// POST — Создание платежа
+// ============================================
+
+export async function POST(request: NextRequest) {
   try {
-    const session = await auth()
-    if (!session?.user || !["ADMIN", "MANAGER"].includes(session.user.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const user = await requireManager()
 
-    const body = await req.json()
-    const data = paymentSchema.parse(body)
+    const body = await request.json()
+    const validatedData = paymentSchema.parse(body)
 
-    // Verify deal exists and is active
+    // Проверка сделки
     const deal = await prisma.deal.findUnique({
-      where: { id: data.dealId },
+      where: { id: validatedData.dealId },
       include: {
-        installments: {
-          orderBy: { index: "asc" },
-        },
         payments: true,
+        installments: { orderBy: { index: "asc" } },
       },
     })
 
@@ -107,76 +111,87 @@ export async function POST(req: NextRequest) {
 
     if (deal.status !== "ACTIVE") {
       return NextResponse.json(
-        { success: false, error: "Платежи принимаются только по активным сделкам" },
+        { success: false, error: "Платежи можно принимать только по активным сделкам" },
         { status: 400 }
       )
     }
 
-    // Calculate remaining amount
+    // Расчёт уже оплаченной суммы
     const totalPaid = deal.payments.reduce((sum, p) => sum + p.amount, 0)
     const remaining = deal.amountToFinance - totalPaid
 
-    if (data.amount > remaining) {
+    if (validatedData.amount > remaining) {
       return NextResponse.json(
-        { success: false, error: `Сумма платежа превышает остаток (${remaining} ₸)` },
+        { success: false, error: `Сумма превышает остаток (${remaining} ₸)` },
         { status: 400 }
       )
     }
 
-    // Find installment to link payment to (if not specified)
-    let installmentId = data.installmentId || null
-    if (!installmentId) {
-      // Find first unpaid installment
-      const unpaidInstallment = deal.installments.find(i => i.status !== "PAID")
-      if (unpaidInstallment) {
-        installmentId = unpaidInstallment.id
-      }
-    }
-
-    // Create payment and update installment status in transaction
+    // Транзакция: платёж + обновление installment
     const result = await prisma.$transaction(async (tx) => {
-      // Create payment
+      // Создаём платёж
       const payment = await tx.payment.create({
         data: {
-          dealId: data.dealId,
-          installmentId,
-          amount: data.amount,
-          method: data.method,
-          comment: data.comment || null,
+          dealId: validatedData.dealId,
+          installmentId: validatedData.installmentId || null,
+          amount: validatedData.amount,
+          method: validatedData.method,
+          comment: validatedData.comment || null,
+          paidAt: new Date(),
         },
       })
 
-      // If linked to installment, check if it's fully paid
-      if (installmentId) {
-        const installment = deal.installments.find(i => i.id === installmentId)
-        if (installment) {
-          // Get all payments for this installment
-          const installmentPayments = await tx.payment.findMany({
-            where: { installmentId },
-          })
-          const totalInstallmentPaid = installmentPayments.reduce((sum, p) => sum + p.amount, 0)
+      // Если указан installment — обновляем его статус
+      if (validatedData.installmentId) {
+        const installment = await tx.installment.findUnique({
+          where: { id: validatedData.installmentId },
+        })
 
-          if (totalInstallmentPaid >= installment.amount) {
+        if (installment && installment.status !== "PAID") {
+          // Считаем все платежи по этому installment
+          const instPayments = await tx.payment.findMany({
+            where: { installmentId: validatedData.installmentId },
+          })
+          const instPaid = instPayments.reduce((sum, p) => sum + p.amount, 0)
+
+          // Если оплачено полностью — ставим PAID
+          if (instPaid >= installment.amount) {
             await tx.installment.update({
-              where: { id: installmentId },
+              where: { id: validatedData.installmentId },
               data: { 
-                status: "PAID", 
-                paidAt: new Date() 
+                status: "PAID",
+                paidAt: new Date(),
               },
             })
           }
         }
+      } else {
+        // Если installmentId не указан — находим первый неоплаченный
+        const nextInstallment = deal.installments.find((i) => i.status !== "PAID")
+        if (nextInstallment) {
+          // Считаем сумму платежей по сделке без привязки к installment
+          const newTotalPaid = totalPaid + validatedData.amount
+          
+          // Считаем сколько installments покрыто
+          let coveredAmount = 0
+          for (const inst of deal.installments) {
+            if (inst.status === "PAID") continue
+            if (coveredAmount + inst.amount <= newTotalPaid - (deal.payments
+              .filter(p => p.installmentId)
+              .reduce((s, p) => s + p.amount, 0))) {
+              await tx.installment.update({
+                where: { id: inst.id },
+                data: { status: "PAID", paidAt: new Date() },
+              })
+              coveredAmount += inst.amount
+            }
+          }
+        }
       }
 
-      // Check if deal is fully paid
-      const newTotalPaid = totalPaid + data.amount
+      // Проверяем, полностью ли оплачена сделка
+      const newTotalPaid = totalPaid + validatedData.amount
       if (newTotalPaid >= deal.amountToFinance) {
-        // Mark all installments as paid
-        await tx.installment.updateMany({
-          where: { dealId: deal.id, status: { not: "PAID" } },
-          data: { status: "PAID", paidAt: new Date() },
-        })
-        // Close the deal
         await tx.deal.update({
           where: { id: deal.id },
           data: { status: "CLOSED" },
@@ -186,35 +201,22 @@ export async function POST(req: NextRequest) {
       return payment
     })
 
-    // Fetch full payment with relations
-    const payment = await prisma.payment.findUnique({
-      where: { id: result.id },
-      include: {
-        deal: {
-          select: {
-            id: true,
-            dealNumber: true,
-            client: { select: { fullName: true } },
-          },
-        },
-        installment: true,
-      },
+    // Аудит
+    await logCreate(user.id, "Payment", result.id, {
+      dealId: validatedData.dealId,
+      amount: validatedData.amount,
+      method: validatedData.method,
     })
 
-    // Audit log
-    await logCreate(session.user.id, "Payment", result.id, result as unknown as Record<string, unknown>)
-
-    return NextResponse.json({ success: true, data: payment })
+    return NextResponse.json({
+      success: true,
+      data: result,
+      message: "Платёж принят",
+    })
   } catch (error) {
-    console.error("Create payment error:", error)
-    if (error instanceof Error && error.name === "ZodError") {
-      return NextResponse.json(
-        { success: false, error: "Проверьте правильность введённых данных" },
-        { status: 400 }
-      )
-    }
+    console.error("POST /api/payments error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при создании платежа" },
+      { success: false, error: error instanceof Error ? error.message : "Ошибка создания платежа" },
       { status: 500 }
     )
   }
