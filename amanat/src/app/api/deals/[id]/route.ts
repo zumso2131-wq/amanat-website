@@ -1,40 +1,46 @@
+// ============================================
+// API СДЕЛКИ — GET / PUT / DELETE
+// ============================================
+
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { auth } from "@/lib/auth"
+import { requireManager, requireAdmin } from "@/lib/auth"
 import { logUpdate, logDelete } from "@/lib/audit"
 import { z } from "zod"
 
-// GET - Get single deal with all details
+// Схема обновления статуса
+const updateStatusSchema = z.object({
+  status: z.enum(["DRAFT", "ACTIVE", "CLOSED", "CANCELED"]),
+})
+
+// ============================================
+// GET — Детали сделки
+// ============================================
+
 export async function GET(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
+    await requireManager()
     const { id } = await params
 
     const deal = await prisma.deal.findUnique({
       where: { id },
       include: {
         client: true,
+        createdByUser: {
+          select: {
+            id: true,
+            fullName: true,
+            phone: true,
+          },
+        },
         installments: {
           orderBy: { index: "asc" },
-          include: {
-            payments: true,
-          },
         },
         payments: {
           orderBy: { paidAt: "desc" },
-        },
-        documents: {
-          orderBy: { createdAt: "desc" },
-        },
-        createdByUser: {
-          select: { id: true, fullName: true, role: true },
         },
       },
     })
@@ -46,164 +52,184 @@ export async function GET(
       )
     }
 
-    // Calculate additional info
-    const totalPaid = deal.payments.reduce((sum, p) => sum + p.amount, 0)
+    // Расчёт выплаченной суммы и остатка
+    const totalPaid = deal.payments.reduce((sum: number, p) => sum + p.amount, 0)
     const remaining = deal.amountToFinance - totalPaid
-    const paidInstallments = deal.installments.filter(i => i.status === "PAID").length
-    const overdueInstallments = deal.installments.filter(i => {
-      if (i.status === "PAID") return false
-      return new Date(i.dueDate) < new Date()
-    }).length
+    const progress = deal.amountToFinance > 0 
+      ? Math.round((totalPaid / deal.amountToFinance) * 100) 
+      : 0
 
+    // Количество просроченных платежей
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const overdueCount = deal.installments.filter(
+      (i) => i.status !== "PAID" && new Date(i.dueDate) < today
+    ).length
+
+    // Маппинг для фронта
     return NextResponse.json({
       success: true,
       data: {
         ...deal,
+        manager: deal.createdByUser,
         totalPaid,
         remaining,
-        paidInstallments,
-        overdueInstallments,
-        progress: deal.installments.length > 0 
-          ? Math.round((paidInstallments / deal.installments.length) * 100)
-          : 0,
+        progress,
+        overdueCount,
       },
     })
   } catch (error) {
-    console.error("Get deal error:", error)
+    console.error("GET /api/deals/[id] error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при получении сделки" },
+      { success: false, error: "Ошибка загрузки сделки" },
       { status: 500 }
     )
   }
 }
 
-// PUT - Update deal status
+// ============================================
+// PUT — Обновление статуса сделки
+// ============================================
+
 export async function PUT(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user || !["ADMIN", "MANAGER"].includes(session.user.role)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
+    const user = await requireManager()
     const { id } = await params
-    const body = await req.json()
 
-    const updateSchema = z.object({
-      status: z.enum(["DRAFT", "ACTIVE", "CLOSED", "CANCELED"]).optional(),
+    const body = await request.json()
+    const { status } = updateStatusSchema.parse(body)
+
+    // Проверка существования сделки
+    const existingDeal = await prisma.deal.findUnique({
+      where: { id },
+      include: { installments: true },
     })
 
-    const data = updateSchema.parse(body)
-
-    const existing = await prisma.deal.findUnique({ where: { id } })
-    if (!existing) {
+    if (!existingDeal) {
       return NextResponse.json(
         { success: false, error: "Сделка не найдена" },
         { status: 404 }
       )
     }
 
-    // Validate status transitions
-    if (data.status) {
-      const validTransitions: Record<string, string[]> = {
-        DRAFT: ["ACTIVE", "CANCELED"],
-        ACTIVE: ["CLOSED", "CANCELED"],
-        CLOSED: [],
-        CANCELED: [],
-      }
-
-      if (!validTransitions[existing.status].includes(data.status)) {
-        return NextResponse.json(
-          { success: false, error: `Невозможно изменить статус с ${existing.status} на ${data.status}` },
-          { status: 400 }
-        )
-      }
+    // Проверка разрешённых переходов статуса
+    const allowedTransitions: Record<string, string[]> = {
+      DRAFT: ["ACTIVE", "CANCELED"],
+      ACTIVE: ["CLOSED", "CANCELED"],
+      CLOSED: [], // Закрытую сделку нельзя изменить
+      CANCELED: [], // Отменённую сделку нельзя изменить
     }
 
-    const deal = await prisma.deal.update({
+    if (!allowedTransitions[existingDeal.status]?.includes(status)) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: `Нельзя изменить статус с "${existingDeal.status}" на "${status}"` 
+        },
+        { status: 400 }
+      )
+    }
+
+    // Обновление статуса
+    const updatedDeal = await prisma.deal.update({
       where: { id },
-      data: {
-        status: data.status,
-      },
+      data: { status },
       include: {
         client: true,
-        installments: {
-          orderBy: { index: "asc" },
-        },
+        installments: { orderBy: { index: "asc" } },
       },
     })
 
-    // Audit log
-    await logUpdate(
-      session.user.id,
-      "Deal",
-      deal.id,
-      existing as unknown as Record<string, unknown>,
-      deal as unknown as Record<string, unknown>
+    // Аудит
+    await logUpdate(user.id, "Deal", id, 
+      { status: existingDeal.status },
+      { status }
     )
 
-    return NextResponse.json({ success: true, data: deal })
+    return NextResponse.json({
+      success: true,
+      data: updatedDeal,
+      message: `Статус сделки изменён на "${status}"`,
+    })
   } catch (error) {
-    console.error("Update deal error:", error)
+    console.error("PUT /api/deals/[id] error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при обновлении сделки" },
+      { success: false, error: "Ошибка обновления сделки" },
       { status: 500 }
     )
   }
 }
 
-// DELETE - Delete deal (admin only, draft only)
+// ============================================
+// DELETE — Удаление сделки (только DRAFT, только ADMIN)
+// ============================================
+
 export async function DELETE(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
+    const user = await requireAdmin()
     const { id } = await params
 
-    const existing = await prisma.deal.findUnique({
+    // Проверка сделки
+    const deal = await prisma.deal.findUnique({
       where: { id },
-      include: { payments: true },
+      include: {
+        payments: true,
+        installments: true,
+      },
     })
 
-    if (!existing) {
+    if (!deal) {
       return NextResponse.json(
         { success: false, error: "Сделка не найдена" },
         { status: 404 }
       )
     }
 
-    if (existing.status !== "DRAFT") {
+    // Нельзя удалять активные/закрытые сделки
+    if (deal.status !== "DRAFT" && deal.status !== "CANCELED") {
       return NextResponse.json(
-        { success: false, error: "Можно удалить только сделки в статусе Черновик" },
+        { success: false, error: "Можно удалять только черновики и отменённые сделки" },
         { status: 400 }
       )
     }
 
-    if (existing.payments.length > 0) {
+    // Нельзя удалять если есть платежи
+    if (deal.payments.length > 0) {
       return NextResponse.json(
-        { success: false, error: "Невозможно удалить сделку с платежами" },
+        { success: false, error: "Нельзя удалить сделку с платежами" },
         { status: 400 }
       )
     }
 
-    // Delete in transaction (installments will be cascade deleted)
-    await prisma.deal.delete({ where: { id } })
+    // Удаление в транзакции
+    await prisma.$transaction(async (tx) => {
+      // Сначала удаляем installments
+      await tx.installment.deleteMany({ where: { dealId: id } })
+      // Затем сделку
+      await tx.deal.delete({ where: { id } })
+    })
 
-    // Audit log
-    await logDelete(session.user.id, "Deal", id, existing as unknown as Record<string, unknown>)
+    // Аудит
+    await logDelete(user.id, "Deal", id, {
+      dealNumber: deal.dealNumber,
+      clientId: deal.clientId,
+      productName: deal.productName,
+    })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      message: "Сделка удалена",
+    })
   } catch (error) {
-    console.error("Delete deal error:", error)
+    console.error("DELETE /api/deals/[id] error:", error)
     return NextResponse.json(
-      { success: false, error: "Ошибка при удалении сделки" },
+      { success: false, error: "Ошибка удаления сделки" },
       { status: 500 }
     )
   }

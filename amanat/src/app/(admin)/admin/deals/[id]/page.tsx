@@ -1,32 +1,48 @@
 "use client"
 
-import { useState, useEffect, use } from "react"
-import { useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { 
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
-} from "@/components/ui/select"
-import { 
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow 
-} from "@/components/ui/table"
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter
-} from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useToast } from "@/components/ui/use-toast"
-import { 
-  ArrowLeft, FileText, Download, CreditCard, CheckCircle, 
-  AlertTriangle, Clock, Loader2, Phone, User, Calendar
-} from "lucide-react"
-import { formatMoney, formatDate, isOverdue, getDaysOverdue } from "@/lib/calculations"
-import { dealStatusLabels, dealStatusColors, installmentStatusLabels, installmentStatusColors, paymentMethodLabels } from "@/lib/utils"
+// ============================================
+// СТРАНИЦА ДЕТАЛИ СДЕЛКИ — /admin/deals/[id]
+// ============================================
 
-interface DealDetail {
+import { useEffect, useState, use } from "react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { useToast } from "@/components/ui/use-toast"
+import { formatMoney, formatDate, getDaysOverdue } from "@/lib/calculations"
+import { ArrowLeft, Loader2, User, Package, Calendar, CreditCard, AlertCircle } from "lucide-react"
+
+// Типы
+interface Installment {
+  id: string
+  index: number
+  dueDate: string
+  amount: number
+  status: string
+}
+
+interface Payment {
+  id: string
+  amount: number
+  method: string
+  paidAt: string
+  comment: string | null
+  user: {
+    id: string
+    fullName: string
+  }
+}
+
+interface Deal {
   id: string
   dealNumber: string
   productName: string
@@ -37,16 +53,9 @@ interface DealDetail {
   downPayment: number
   amountToFinance: number
   months: number
-  startDate: string
-  monthlyBasePayment: number
-  lastPaymentAdjustment: number
   status: string
+  startDate: string
   createdAt: string
-  totalPaid: number
-  remaining: number
-  paidInstallments: number
-  overdueInstallments: number
-  progress: number
   client: {
     id: string
     fullName: string
@@ -54,452 +63,351 @@ interface DealDetail {
     iin: string | null
     address: string | null
   }
-  installments: Array<{
+  manager: {
     id: string
-    index: number
-    dueDate: string
-    amount: number
-    status: string
-    paidAt: string | null
-  }>
-  payments: Array<{
-    id: string
-    amount: number
-    method: string
-    paidAt: string
-    comment: string | null
-  }>
-  createdByUser: { fullName: string }
+    fullName: string
+    phone: string
+  }
+  installments: Installment[]
+  payments: Payment[]
+  totalPaid: number
+  remaining: number
+  progress: number
+  overdueCount: number
+}
+
+// Статусы
+const statusLabels: Record<string, string> = {
+  DRAFT: "Черновик",
+  ACTIVE: "Активна",
+  CLOSED: "Закрыта",
+  CANCELED: "Отменена",
+}
+
+const statusColors: Record<string, string> = {
+  DRAFT: "bg-gray-100 text-gray-800",
+  ACTIVE: "bg-green-100 text-green-800",
+  CLOSED: "bg-blue-100 text-blue-800",
+  CANCELED: "bg-red-100 text-red-800",
+}
+
+const installmentStatusLabels: Record<string, string> = {
+  DUE: "Ожидает",
+  PAID: "Оплачен",
+  OVERDUE: "Просрочен",
+  PARTIAL: "Частично",
+}
+
+const installmentStatusColors: Record<string, string> = {
+  DUE: "bg-yellow-100 text-yellow-800",
+  PAID: "bg-green-100 text-green-800",
+  OVERDUE: "bg-red-100 text-red-800",
+  PARTIAL: "bg-orange-100 text-orange-800",
+}
+
+const paymentMethodLabels: Record<string, string> = {
+  CASH: "Наличные",
+  CARD: "Карта",
+  TRANSFER: "Перевод",
 }
 
 export default function DealDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
-  const router = useRouter()
+  const resolvedParams = use(params)
   const { toast } = useToast()
-  
-  const [deal, setDeal] = useState<DealDetail | null>(null)
+  const [deal, setDeal] = useState<Deal | null>(null)
   const [loading, setLoading] = useState(true)
-  const [isPaymentOpen, setIsPaymentOpen] = useState(false)
-  const [paymentLoading, setPaymentLoading] = useState(false)
-  const [paymentData, setPaymentData] = useState({
-    amount: "",
-    method: "CASH",
-    installmentId: "",
-    comment: "",
-  })
 
-  const fetchDeal = async () => {
-    try {
-      setLoading(true)
-      const res = await fetch(`/api/deals/${id}`)
-      const data = await res.json()
-      if (data.success) {
-        setDeal(data.data)
-      } else {
-        toast({ variant: "destructive", title: "Ошибка", description: data.error })
-        router.push("/admin/deals")
-      }
-    } catch (error) {
-      toast({ variant: "destructive", title: "Ошибка загрузки сделки" })
-    } finally {
-      setLoading(false)
-    }
-  }
-
+  // Загрузка сделки
   useEffect(() => {
+    const fetchDeal = async () => {
+      try {
+        const response = await fetch(`/api/deals/${resolvedParams.id}`)
+        const data = await response.json()
+
+        if (data.success) {
+          setDeal(data.data)
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Ошибка",
+            description: data.error || "Сделка не найдена",
+          })
+        }
+      } catch {
+        toast({
+          variant: "destructive",
+          title: "Ошибка",
+          description: "Не удалось загрузить сделку",
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
     fetchDeal()
-  }, [id])
-
-  const handleStatusChange = async (newStatus: string) => {
-    try {
-      const res = await fetch(`/api/deals/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast({ title: "Статус обновлён", variant: "success" })
-        fetchDeal()
-      } else {
-        toast({ variant: "destructive", title: "Ошибка", description: data.error })
-      }
-    } catch (error) {
-      toast({ variant: "destructive", title: "Ошибка обновления статуса" })
-    }
-  }
-
-  const handlePayment = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setPaymentLoading(true)
-    try {
-      const res = await fetch("/api/payments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dealId: id,
-          amount: parseInt(paymentData.amount),
-          method: paymentData.method,
-          installmentId: paymentData.installmentId || undefined,
-          comment: paymentData.comment || undefined,
-        }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        toast({ title: "Платёж принят", variant: "success" })
-        setIsPaymentOpen(false)
-        setPaymentData({ amount: "", method: "CASH", installmentId: "", comment: "" })
-        fetchDeal()
-      } else {
-        toast({ variant: "destructive", title: "Ошибка", description: data.error })
-      }
-    } catch (error) {
-      toast({ variant: "destructive", title: "Ошибка создания платежа" })
-    } finally {
-      setPaymentLoading(false)
-    }
-  }
+  }, [resolvedParams.id, toast])
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
-  if (!deal) return null
-
-  const nextInstallment = deal.installments.find(i => i.status !== "PAID")
+  if (!deal) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">Сделка не найдена</p>
+        <Link href="/admin/deals">
+          <Button variant="link">Вернуться к списку</Button>
+        </Link>
+      </div>
+    )
+  }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
+    <div className="space-y-6">
+      {/* Заголовок */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+          <Link href="/admin/deals">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold">Сделка {deal.dealNumber}</h1>
-              <Badge className={dealStatusColors[deal.status]}>
-                {dealStatusLabels[deal.status]}
+              <h1 className="text-2xl font-bold font-mono">{deal.dealNumber}</h1>
+              <Badge className={statusColors[deal.status]}>
+                {statusLabels[deal.status]}
               </Badge>
             </div>
-            <p className="text-muted-foreground">{deal.productName}</p>
+            <p className="text-muted-foreground">
+              Создана: {formatDate(deal.createdAt)}
+            </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => window.open(`/api/pdf?dealId=${id}&type=contract`, "_blank")}>
-            <FileText className="h-4 w-4 mr-2" />
-            Договор
-          </Button>
-          <Button variant="outline" onClick={() => window.open(`/api/pdf?dealId=${id}&type=schedule`, "_blank")}>
-            <Download className="h-4 w-4 mr-2" />
-            График
-          </Button>
-          {deal.status === "ACTIVE" && (
-            <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  Принять платёж
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Принять платёж</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handlePayment} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Сумма (₸) *</Label>
-                    <Input
-                      type="number"
-                      value={paymentData.amount}
-                      onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
-                      placeholder={nextInstallment ? nextInstallment.amount.toString() : ""}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Остаток к оплате: {formatMoney(deal.remaining)}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Способ оплаты</Label>
-                    <Select
-                      value={paymentData.method}
-                      onValueChange={(v) => setPaymentData({ ...paymentData, method: v })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="CASH">Наличные</SelectItem>
-                        <SelectItem value="CARD">Карта</SelectItem>
-                        <SelectItem value="TRANSFER">Перевод</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Комментарий</Label>
-                    <Input
-                      value={paymentData.comment}
-                      onChange={(e) => setPaymentData({ ...paymentData, comment: e.target.value })}
-                      placeholder="Необязательно"
-                    />
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setIsPaymentOpen(false)}>
-                      Отмена
-                    </Button>
-                    <Button type="submit" disabled={paymentLoading}>
-                      {paymentLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      Принять
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          )}
-        </div>
+        {deal.overdueCount > 0 && (
+          <div className="flex items-center gap-2 text-red-600 bg-red-50 px-4 py-2 rounded-lg">
+            <AlertCircle className="h-5 w-5" />
+            <span className="font-medium">Просрочено: {deal.overdueCount} платежей</span>
+          </div>
+        )}
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">К выплате</p>
-            <p className="text-2xl font-bold">{formatMoney(deal.amountToFinance)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Оплачено</p>
-            <p className="text-2xl font-bold text-green-600">{formatMoney(deal.totalPaid)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Остаток</p>
-            <p className="text-2xl font-bold text-orange-600">{formatMoney(deal.remaining)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Прогресс</p>
-            <p className="text-2xl font-bold">{deal.progress}%</p>
-            <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-primary transition-all" 
-                style={{ width: `${deal.progress}%` }} 
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Deal Info */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Информация о сделке</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Товар</p>
-                  <p className="font-medium">{deal.productName}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Цена закупа</p>
-                  <p className="font-medium">{formatMoney(deal.purchasePrice)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Наценка</p>
-                  <p className="font-medium">{deal.markupPercentFinal}%</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Цена продажи</p>
-                  <p className="font-medium">{formatMoney(deal.salePrice)}</p>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Первоначальный взнос</p>
-                  <p className="font-medium">{formatMoney(deal.downPayment)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Срок рассрочки</p>
-                  <p className="font-medium">{deal.months} месяцев</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Ежемесячный платёж</p>
-                  <p className="font-medium">{formatMoney(deal.monthlyBasePayment)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Дата выдачи</p>
-                  <p className="font-medium">{formatDate(new Date(deal.startDate))}</p>
-                </div>
-              </div>
-            </div>
-            
-            {/* Status Actions */}
-            {deal.status === "DRAFT" && (
-              <div className="mt-6 pt-6 border-t">
-                <Button onClick={() => handleStatusChange("ACTIVE")}>
-                  Активировать сделку
-                </Button>
-              </div>
-            )}
-            {deal.status === "ACTIVE" && deal.remaining === 0 && (
-              <div className="mt-6 pt-6 border-t">
-                <Button onClick={() => handleStatusChange("CLOSED")} variant="outline">
-                  Закрыть сделку
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Client Info */}
+      {/* Основная информация */}
+      <div className="grid grid-cols-3 gap-6">
+        {/* Клиент */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-4 w-4" />
+            <CardTitle className="text-lg flex items-center gap-2">
+              <User className="h-5 w-5" />
               Клиент
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-2">
             <div>
-              <p className="font-medium">{deal.client.fullName}</p>
+              <div className="text-sm text-muted-foreground">ФИО</div>
+              <div className="font-medium">{deal.client.fullName}</div>
             </div>
-            <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-muted-foreground" />
-              <a href={`tel:${deal.client.phone}`} className="hover:text-primary">
-                {deal.client.phone}
-              </a>
+            <div>
+              <div className="text-sm text-muted-foreground">Телефон</div>
+              <div>{deal.client.phone}</div>
             </div>
             {deal.client.iin && (
               <div>
-                <p className="text-sm text-muted-foreground">ИИН</p>
-                <p>{deal.client.iin}</p>
+                <div className="text-sm text-muted-foreground">ИИН</div>
+                <div>{deal.client.iin}</div>
               </div>
             )}
             {deal.client.address && (
               <div>
-                <p className="text-sm text-muted-foreground">Адрес</p>
-                <p className="text-sm">{deal.client.address}</p>
+                <div className="text-sm text-muted-foreground">Адрес</div>
+                <div className="text-sm">{deal.client.address}</div>
               </div>
             )}
-            <Separator />
+          </CardContent>
+        </Card>
+
+        {/* Товар */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Товар
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
             <div>
-              <p className="text-sm text-muted-foreground">Менеджер</p>
-              <p>{deal.createdByUser.fullName}</p>
+              <div className="text-sm text-muted-foreground">Название</div>
+              <div className="font-medium">{deal.productName}</div>
+            </div>
+            {deal.productSku && (
+              <div>
+                <div className="text-sm text-muted-foreground">Артикул</div>
+                <div className="font-mono">{deal.productSku}</div>
+              </div>
+            )}
+            <div>
+              <div className="text-sm text-muted-foreground">Менеджер</div>
+              <div>{deal.manager.fullName}</div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Финансы */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              Финансы
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <div className="text-sm text-muted-foreground">Закуп</div>
+                <div>{formatMoney(deal.purchasePrice)}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Наценка</div>
+                <div>{deal.markupPercentFinal}%</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Продажа</div>
+                <div className="font-medium">{formatMoney(deal.salePrice)}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Взнос</div>
+                <div>{formatMoney(deal.downPayment)}</div>
+              </div>
+            </div>
+            <div className="border-t pt-2 mt-2">
+              <div className="text-sm text-muted-foreground">Прибыль</div>
+              <div className="text-lg font-bold text-green-600">
+                {formatMoney(deal.salePrice - deal.purchasePrice)}
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabs: Schedule & Payments */}
-      <Tabs defaultValue="schedule">
-        <TabsList>
-          <TabsTrigger value="schedule">
-            <Calendar className="h-4 w-4 mr-2" />
-            График платежей
-          </TabsTrigger>
-          <TabsTrigger value="payments">
-            <CreditCard className="h-4 w-4 mr-2" />
-            История платежей ({deal.payments.length})
-          </TabsTrigger>
-        </TabsList>
+      {/* Прогресс оплаты */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Прогресс оплаты</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-4 gap-6 mb-4">
+            <div>
+              <div className="text-sm text-muted-foreground">К выплате</div>
+              <div className="text-xl font-bold">{formatMoney(deal.amountToFinance)}</div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Оплачено</div>
+              <div className="text-xl font-bold text-green-600">{formatMoney(deal.totalPaid)}</div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Остаток</div>
+              <div className="text-xl font-bold text-orange-600">{formatMoney(deal.remaining)}</div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Прогресс</div>
+              <div className="text-xl font-bold">{deal.progress}%</div>
+            </div>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div
+              className="bg-green-500 h-3 rounded-full transition-all"
+              style={{ width: `${Math.min(deal.progress, 100)}%` }}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
-        <TabsContent value="schedule">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-16">№</TableHead>
-                    <TableHead>Дата</TableHead>
-                    <TableHead>Сумма</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead>Дата оплаты</TableHead>
+      {/* График платежей */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            График платежей ({deal.months} мес)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-16">#</TableHead>
+                <TableHead>Дата платежа</TableHead>
+                <TableHead className="text-right">Сумма</TableHead>
+                <TableHead>Статус</TableHead>
+                <TableHead className="text-right">Дней просрочки</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {deal.installments.map((inst) => {
+                const daysOverdue = inst.status !== "PAID" ? getDaysOverdue(inst.dueDate) : 0
+                return (
+                  <TableRow key={inst.id}>
+                    <TableCell className="font-mono">{inst.index}</TableCell>
+                    <TableCell>{formatDate(inst.dueDate)}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatMoney(inst.amount)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={installmentStatusColors[inst.status]}>
+                        {installmentStatusLabels[inst.status]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {daysOverdue > 0 && inst.status !== "PAID" && (
+                        <span className="text-red-600 font-medium">{daysOverdue} дн.</span>
+                      )}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {deal.installments.map((inst) => {
-                    const overdue = isOverdue(inst.dueDate, inst.status)
-                    const days = overdue ? getDaysOverdue(inst.dueDate) : 0
-                    return (
-                      <TableRow key={inst.id} className={overdue ? "bg-red-50" : ""}>
-                        <TableCell className="font-medium">{inst.index}</TableCell>
-                        <TableCell>{formatDate(new Date(inst.dueDate))}</TableCell>
-                        <TableCell className="font-medium">{formatMoney(inst.amount)}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Badge className={installmentStatusColors[inst.status]}>
-                              {installmentStatusLabels[inst.status]}
-                            </Badge>
-                            {overdue && (
-                              <span className="text-xs text-red-600">
-                                ({days} дн.)
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {inst.paidAt ? formatDate(new Date(inst.paidAt)) : "—"}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                )
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-        <TabsContent value="payments">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Дата</TableHead>
-                    <TableHead>Сумма</TableHead>
-                    <TableHead>Способ</TableHead>
-                    <TableHead>Комментарий</TableHead>
+      {/* История платежей */}
+      {deal.payments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">История платежей</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Дата</TableHead>
+                  <TableHead className="text-right">Сумма</TableHead>
+                  <TableHead>Способ</TableHead>
+                  <TableHead>Принял</TableHead>
+                  <TableHead>Комментарий</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {deal.payments.map((payment) => (
+                  <TableRow key={payment.id}>
+                    <TableCell>{formatDate(payment.paidAt)}</TableCell>
+                    <TableCell className="text-right font-medium text-green-600">
+                      +{formatMoney(payment.amount)}
+                    </TableCell>
+                    <TableCell>{paymentMethodLabels[payment.method]}</TableCell>
+                    <TableCell>{payment.user.fullName}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {payment.comment || "—"}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {deal.payments.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                        Нет платежей
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    deal.payments.map((payment) => (
-                      <TableRow key={payment.id}>
-                        <TableCell>{formatDate(new Date(payment.paidAt))}</TableCell>
-                        <TableCell className="font-medium text-green-600">
-                          +{formatMoney(payment.amount)}
-                        </TableCell>
-                        <TableCell>{paymentMethodLabels[payment.method]}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {payment.comment || "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
