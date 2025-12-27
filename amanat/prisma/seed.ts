@@ -84,7 +84,7 @@ async function main() {
     },
   })
 
-  const client2 = await prisma.client.upsert({
+  await prisma.client.upsert({
     where: { phone: "+77772223344" },
     update: {},
     create: {
@@ -95,7 +95,7 @@ async function main() {
     },
   })
 
-  const client3 = await prisma.client.upsert({
+  await prisma.client.upsert({
     where: { phone: "+77773334455" },
     update: {},
     create: {
